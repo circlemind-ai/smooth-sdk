@@ -151,7 +151,7 @@ class BaseClient:
 # --- Synchronous Client ---
 
 
-class SyncClient(BaseClient):
+class SmoothClient(BaseClient):
   """A synchronous client for the API."""
 
   def __init__(self, api_key: Optional[str] = None, base_url: str = BASE_URL, api_version: str = "v1"):
@@ -173,7 +173,7 @@ class SyncClient(BaseClient):
     if hasattr(self, "_session"):
       self._session.close()
 
-  def run_task(self, payload: TaskRequest) -> TaskResponse:
+  def submit_task(self, payload: TaskRequest) -> TaskResponse:
     """Submits a task to be run.
 
     Args:
@@ -217,7 +217,7 @@ class SyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  def run_and_wait_for_task(self, payload: TaskRequest, poll_interval: int = 1, timeout: int = 60 * 15) -> TaskResponse:
+  def run(self, payload: TaskRequest, poll_interval: int = 1, timeout: int = 60 * 15) -> TaskResponse:
     """Runs a task and waits for it to complete.
 
     This method submits a task and then polls the get_task endpoint
@@ -242,7 +242,7 @@ class SyncClient(BaseClient):
       raise ValueError("Timeout must be at least 1 second.")
 
     start_time = time.time()
-    initial_response = self.run_task(payload)
+    initial_response = self.submit_task(payload)
     task_id = initial_response.id
 
     while (time.time() - start_time) < timeout:
@@ -255,7 +255,7 @@ class SyncClient(BaseClient):
 
     raise TimeoutError(f"Task {task_id} did not complete within {timeout} seconds.")
 
-  def get_browser(self, session_id: Optional[str] = None, session_name: Optional[str] = None) -> BrowserResponse:
+  def get_session(self, session_id: Optional[str] = None, session_name: Optional[str] = None) -> BrowserResponse:
     """Gets an interactive browser instance.
 
     Args:
@@ -303,7 +303,7 @@ class SyncClient(BaseClient):
 # --- Asynchronous Client ---
 
 
-class AsyncClient(BaseClient):
+class SmoothAsyncClient(BaseClient):
   """An asynchronous client for the API."""
 
   def __init__(self, api_key: Optional[str] = None, base_url: str = BASE_URL, api_version: str = "v1", timeout: int = 30):
@@ -319,7 +319,7 @@ class AsyncClient(BaseClient):
     """Exits the asynchronous context manager."""
     await self.close()
 
-  async def run_task(self, payload: TaskRequest) -> TaskResponse:
+  async def submit_task(self, payload: TaskRequest) -> TaskResponse:
     """Submits a task to be run asynchronously.
 
     Args:
@@ -363,7 +363,7 @@ class AsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  async def run_and_wait_for_task(self, payload: TaskRequest, poll_interval: int = 1, timeout: int = 60 * 15) -> TaskResponse:
+  async def run(self, payload: TaskRequest, poll_interval: int = 1, timeout: int = 60 * 15) -> TaskResponse:
     """Runs a task and waits for it to complete asynchronously.
 
     This method submits a task and then polls the get_task endpoint
@@ -388,7 +388,7 @@ class AsyncClient(BaseClient):
       raise ValueError("Timeout must be at least 1 second.")
 
     start_time = time.time()
-    initial_response = await self.run_task(payload)
+    initial_response = await self.submit_task(payload)
     task_id = initial_response.id
 
     logger.info(f"Task {task_id} started, polling every {poll_interval}s for up to {timeout}s")
@@ -404,7 +404,7 @@ class AsyncClient(BaseClient):
 
     raise TimeoutError(f"Task {task_id} did not complete within {timeout} seconds.")
 
-  async def get_browser(self, session_id: Optional[str] = None, session_name: Optional[str] = None) -> BrowserResponse:
+  async def get_session(self, session_id: Optional[str] = None, session_name: Optional[str] = None) -> BrowserResponse:
     """Gets an interactive browser instance asynchronously.
 
     Args:
