@@ -61,6 +61,17 @@ class TaskRequest(BaseModel):
   proxy_password: str | None = Field(default=None, description="(optional) Proxy server password.")
 
 
+class BrowserSessionRequest(BaseModel):
+  """Request model for creating a browser session."""
+
+  session_id: str | None = Field(
+    default=None, description="The session ID to associate to the browser instance. If None, a new session will be created."
+  )
+  session_name: str | None = Field(
+    default=None, description="The name to associate to the new browser session. Ignored if a valid session_id is provided."
+  )
+
+
 class BrowserSessionResponse(BaseModel):
   """Browser session response model."""
 
@@ -68,7 +79,6 @@ class BrowserSessionResponse(BaseModel):
 
   live_url: str = Field(description="The live URL to interact with the browser session.")
   session_id: str = Field(description="The ID of the browser session associated with the opened browser instance.")
-  session_name: str | None = Field(default=None, description="(optional) The name of the browser session.")
 
 
 class BrowserSessionsResponse(BaseModel):
@@ -284,7 +294,7 @@ class SmoothClient(BaseClient):
 
     raise TimeoutError(f"Task {task_id} did not complete within {timeout} seconds.")
 
-  def get_session(self, session_id: str | None = None, session_name: str | None = None) -> BrowserSessionResponse:
+  def open_session(self, session_id: str | None = None, session_name: str | None = None) -> BrowserSessionResponse:
     """Gets an interactive browser instance.
 
     Args:
@@ -297,14 +307,11 @@ class SmoothClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
-    params: dict[str, Any] = {}
-    if session_id:
-      params["session_id"] = session_id
-    if session_name:
-      params["session_name"] = session_name
-
     try:
-      response = self._session.get(f"{self.base_url}/browser", params=params)
+      response = self._session.post(
+        f"{self.base_url}/browser/session",
+        json=BrowserSessionRequest(session_id=session_id, session_name=session_name).model_dump(exclude_none=True),
+      )
       data = self._handle_response(response)
       return BrowserSessionResponse(**data["r"])
     except requests.exceptions.RequestException as e:
@@ -475,14 +482,11 @@ class SmoothAsyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
-    params: dict[str, Any] = {}
-    if session_id:
-      params["session_id"] = session_id
-    if session_name:
-      params["session_name"] = session_name
-
     try:
-      response = await self._client.get(f"{self.base_url}/browser", params=params)
+      response = await self._client.post(
+        f"{self.base_url}/browser/session",
+        json=BrowserSessionRequest(session_id=session_id, session_name=session_name).model_dump(exclude_none=True),
+      )
       data = self._handle_response(response)
       return BrowserSessionResponse(**data["r"])
     except httpx.RequestError as e:
