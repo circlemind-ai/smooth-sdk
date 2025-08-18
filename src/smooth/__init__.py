@@ -120,7 +120,7 @@ class BaseClient:
     self.api_key = api_key
     self.base_url = f"{base_url.rstrip('/')}/{api_version}"
     self.headers = {
-      "Authorization": f"Bearer {self.api_key}",
+      "apikey": self.api_key,
       "Content-Type": "application/json",
       "User-Agent": "smooth-python-sdk/0.1.0",
     }
