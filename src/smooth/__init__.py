@@ -33,7 +33,7 @@ class TaskResponse(BaseModel):
   result: Any | None = Field(default=None, description="The result of the task if successful.")
   error: str | None = Field(default=None, description="Error message if the task failed.")
   credits_used: int | None = Field(default=None, description="The amount of credits used to perform the task.")
-  src: str | None = Field(default=None, description="")
+  url: str | None = Field(default=None, description="The URL to view the task execution.")
 
 
 class TaskRequest(BaseModel):
@@ -45,21 +45,21 @@ class TaskRequest(BaseModel):
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=1, le=64, description="Maximum number of steps the agent can take (max 64).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
-  enable_recording: bool = Field(default=False, description="(optional) Enable video recording of the task execution.")
+  enable_recording: bool = Field(default=False, description="Enable video recording of the task execution. Default is False")
   session_id: str | None = Field(
     default=None,
-    description="(optional) Browser session ID to use. Each session maintains its own state, such as login credentials.",
+    description="Browser session ID to use. Each session maintains its own state, such as login credentials.",
   )
-  stealth_mode: bool = Field(default=False, description="(optional) Run the browser in stealth mode.")
+  stealth_mode: bool = Field(default=False, description="Run the browser in stealth mode.")
   proxy_server: str | None = Field(
     default=None,
     description=(
-      "(optional) Proxy server url to route browser traffic through."
+      "Proxy server url to route browser traffic through."
       " Must include the protocol to use (e.g. http:// or https://)"
     ),
   )
-  proxy_username: str | None = Field(default=None, description="(optional) Proxy server username.")
-  proxy_password: str | None = Field(default=None, description="(optional) Proxy server password.")
+  proxy_username: str | None = Field(default=None, description="Proxy server username.")
+  proxy_password: str | None = Field(default=None, description="Proxy server password.")
 
 
 class BrowserSessionRequest(BaseModel):
@@ -252,12 +252,12 @@ class SmoothClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
-        enable_recording: (optional) Enable video recording of the task execution.
-        session_id: (optional) Browser session ID to use.
-        stealth_mode: (optional) Run the browser in stealth mode.
-        proxy_server: (optional) Proxy server url to route browser traffic through.
-        proxy_username: (optional) Proxy server username.
-        proxy_password: (optional) Proxy server password.
+        enable_recording: Enable video recording of the task execution.
+        session_id: Browser session ID to use.
+        stealth_mode: Run the browser in stealth mode.
+        proxy_server: Proxy server url to route browser traffic through.
+        proxy_username: Proxy server username.
+        proxy_password: Proxy server password.
 
     Returns:
         The final response of the completed or failed task.
@@ -430,12 +430,12 @@ class SmoothAsyncClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
-        enable_recording: (optional) Enable video recording of the task execution.
-        session_id: (optional) Browser session ID to use.
-        stealth_mode: (optional) Run the browser in stealth mode.
-        proxy_server: (optional) Proxy server url to route browser traffic through.
-        proxy_username: (optional) Proxy server username.
-        proxy_password: (optional) Proxy server password.
+        enable_recording: Enable video recording of the task execution.
+        session_id: Browser session ID to use.
+        stealth_mode: Run the browser in stealth mode.
+        proxy_server: Proxy server url to route browser traffic through.
+        proxy_username: Proxy server username.
+        proxy_password: Proxy server password.
 
     Returns:
         The final response of the completed or failed task.
