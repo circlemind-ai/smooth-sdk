@@ -17,7 +17,7 @@ jobs:
     # Optional: Define an environment for protection rules and environment-specific secrets
     environment:
       name: pypi
-      url: https://pypi.org/p/your-package-name # IMPORTANT: Update with your package name
+      url: https://pypi.org/p/smooth-py # IMPORTANT: Update with your package name
 
     # These permissions are essential for trusted publishing
     permissions:
@@ -33,9 +33,15 @@ jobs:
           python-version: "3.12"
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1 # A dedicated action is often more robust
+        run: pipx install poetry==2.1.*
+      
+      - name: Cache Poetry virtual environment
+        uses: actions/cache@v3
         with:
-          version: stable # Or specify a version like 1.8.2
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
 
       - name: Build package
         run: poetry build
@@ -43,5 +49,3 @@ jobs:
       # This is the key step for publishing. It uses the OIDC token automatically.
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1 # Use the release/v1 tag for stability
-        # The action will automatically find the built distributions in the dist/ directory.
-        # No API token is needed due to the 'permissions' setting above.
