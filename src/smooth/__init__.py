@@ -20,23 +20,17 @@ BASE_URL = "https://api2.circlemind.co/api/"
 # These models define the data structures for API requests and responses.
 
 
-class TaskData(BaseModel):
-  """Task data model."""
-
-  result: Any | None = Field(default=None, description="The result of the task if successful.")
-  error: str | None = Field(default=None, description="Error message if the task failed.")
-  credits_used: int | None = Field(default=None, description="The amount of credits used to perform the task.")
-  src: str | None = Field(default=None, description="")
-
-
 class TaskResponse(BaseModel):
   """Task response model."""
 
   model_config = ConfigDict(extra="forbid")
 
   id: str = Field(description="The ID of the task.")
-  status: str = Field(default="RUNNING", description="The status of the task.")
-  data: TaskData = Field(default_factory=lambda: TaskData(), description="The data associated with the task.")
+  status: Literal["waiting", "running", "done", "failed"] = Field(description="The status of the task.")
+  result: Any | None = Field(default=None, description="The result of the task if successful.")
+  error: str | None = Field(default=None, description="Error message if the task failed.")
+  credits_used: int | None = Field(default=None, description="The amount of credits used to perform the task.")
+  src: str | None = Field(default=None, description="")
 
 
 class TaskRequest(BaseModel):
@@ -53,7 +47,13 @@ class TaskRequest(BaseModel):
     description="(optional) Browser session ID to use. Each session maintains its own state, such as login credentials.",
   )
   stealth_mode: bool = Field(default=False, description="(optional) Run the browser in stealth mode.")
-  proxy_server: Optional[str] = Field(default=None, description="(optional) Proxy server URL.")
+  proxy_server: Optional[str] = Field(
+    default=None,
+    description=(
+      "(optional) Proxy server url to route browser traffic through."
+      " Must include the protocol to use (e.g. http:// or https://)"
+    ),
+  )
   proxy_username: Optional[str] = Field(default=None, description="(optional) Proxy server username.")
   proxy_password: Optional[str] = Field(default=None, description="(optional) Proxy server password.")
 
@@ -125,7 +125,7 @@ class BaseClient:
       "User-Agent": "smooth-python-sdk/0.1.0",
     }
 
-  def _handle_response(self, response: Union[requests.Response, httpx.Response]) -> dict:
+  def _handle_response(self, response: Union[requests.Response, httpx.Response]) -> dict[str, Any]:
     """Handles HTTP responses and raises exceptions for errors."""
     if 200 <= response.status_code < 300:
       try:
@@ -135,6 +135,7 @@ class BaseClient:
         raise ApiError(status_code=response.status_code, detail="Invalid JSON response from server") from None
 
     # Handle error responses
+    error_data = None
     try:
       error_data = response.json()
       detail = error_data.get("detail", response.text)
@@ -143,7 +144,7 @@ class BaseClient:
 
     logger.error(f"API error: {response.status_code} - {detail}")
     raise ApiError(
-      status_code=response.status_code, detail=detail, response_data=error_data if "error_data" in locals() else None
+      status_code=response.status_code, detail=detail, response_data=error_data
     )
 
 
@@ -163,7 +164,7 @@ class SyncClient(BaseClient):
     """Enters the synchronous context manager."""
     return self
 
-  def __exit__(self, exc_type, exc_val, exc_tb):
+  def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
     """Exits the synchronous context manager."""
     self.close()
 
@@ -267,7 +268,7 @@ class SyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
-    params = {}
+    params: dict[str, Any] = {}
     if session_id:
       params["session_id"] = session_id
     if session_name:
@@ -314,7 +315,7 @@ class AsyncClient(BaseClient):
     """Enters the asynchronous context manager."""
     return self
 
-  async def __aexit__(self, exc_type, exc_val, exc_tb):
+  async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
     """Exits the asynchronous context manager."""
     await self.close()
 
@@ -416,7 +417,7 @@ class AsyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
-    params = {}
+    params: dict[str, Any] = {}
     if session_id:
       params["session_id"] = session_id
     if session_name:
