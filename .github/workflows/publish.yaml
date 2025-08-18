@@ -1,0 +1,47 @@
+# .github/workflows/publish.yml
+name: Publish Package to PyPI
+
+on:
+  # This action will trigger when a new release is created in GitHub
+  release:
+    types: [published]
+
+  # This allows you to run the workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build-n-publish:
+    name: Build and publish Python 🐍 distributions to PyPI
+    runs-on: ubuntu-latest # Using ubuntu-latest is generally recommended
+    
+    # Optional: Define an environment for protection rules and environment-specific secrets
+    environment:
+      name: pypi
+      url: https://pypi.org/p/your-package-name # IMPORTANT: Update with your package name
+
+    # These permissions are essential for trusted publishing
+    permissions:
+      id-token: write # This is required for OIDC authentication with PyPI
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4 # Use the latest major version of the action
+
+      - name: Set up Python
+        uses: actions/setup-python@v5 # Use the latest major version of the action
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1 # A dedicated action is often more robust
+        with:
+          version: stable # Or specify a version like 1.8.2
+
+      - name: Build package
+        run: poetry build
+
+      # This is the key step for publishing. It uses the OIDC token automatically.
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1 # Use the release/v1 tag for stability
+        # The action will automatically find the built distributions in the dist/ directory.
+        # No API token is needed due to the 'permissions' setting above.
