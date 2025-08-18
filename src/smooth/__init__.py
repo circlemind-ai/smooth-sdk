@@ -431,6 +431,23 @@ class AsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  async def list_sessions(self) -> BrowserSessionsResponse:
+    """Lists all browser sessions for the user.
+
+    Returns:
+        A list of existing browser sessions.
+
+    Raises:
+        ApiException: If the API request fails.
+    """
+    try:
+      response = await self._client.get(f"{self.base_url}/browser/session")
+      data = self._handle_response(response)
+      return BrowserSessionsResponse(**data["r"])
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
   async def close(self):
     """Closes the async client session."""
     await self._client.aclose()
