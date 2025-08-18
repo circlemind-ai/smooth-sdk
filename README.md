@@ -23,9 +23,9 @@ The SDK requires an API key for authentication. You can provide the API key in t
 1.  **Directly in the client constructor**:
 
     ```python
-    from smooth import SyncClient
+    from smooth import SmoothClient
 
-    client = SyncClient(api_key="YOUR_API_KEY")
+    client = SmoothClient(api_key="YOUR_API_KEY")
     ```
 
 2.  **As an environment variable**:
@@ -37,30 +37,30 @@ The SDK requires an API key for authentication. You can provide the API key in t
     ```
 
     ```python
-    from smooth import SyncClient
+    from smooth import SmoothClient
 
     # The client will pick up the API key from the environment variable
-    client = SyncClient()
+    client = SmoothClient()
     ```
 
 ## Usage
 
 ### Synchronous Client
 
-The `SyncClient` is ideal for scripts and applications that don't require asynchronous operations.
+The `SmoothClient` is ideal for scripts and applications that don't require asynchronous operations.
 
 #### Running a Task and Waiting for the Result
 
 ```python
-from smooth import SyncClient, TaskRequest
+from smooth import SmoothClient, TaskRequest
 
-with SyncClient() as client:
+with SmoothClient() as client:
     task_payload = TaskRequest(
         task="Go to https://www.google.com and search for 'Smooth SDK'"
     )
     
     try:
-        completed_task = client.run_and_wait_for_task(task_payload)
+        completed_task = client.run(task_payload)
         
         if completed_task.result:
             print("Task Result:", completed_task.result)
@@ -76,9 +76,9 @@ with SyncClient() as client:
 #### Managing Browser Sessions
 
 ```python
-from smooth import SyncClient
+from smooth import SmoothClient
 
-with SyncClient() as client:
+with SmoothClient() as client:
     # Get a new browser session
     browser_session = client.get_browser(session_name="my-test-session")
     print("Live URL:", browser_session.live_url)
@@ -91,22 +91,22 @@ with SyncClient() as client:
 
 ### Asynchronous Client
 
-The `AsyncClient` is designed for use in asynchronous applications, such as those built with `asyncio`, to handle multiple operations concurrently without blocking.
+The `SmoothAsyncClient` is designed for use in asynchronous applications, such as those built with `asyncio`, to handle multiple operations concurrently without blocking.
 
 #### Running a Task and Waiting for the Result
 
 ```python
 import asyncio
-from smooth import AsyncClient, TaskRequest
+from smooth import SmoothAsyncClient, TaskRequest
 
 async def main():
-    async with AsyncClient() as client:
+    async with SmoothAsyncClient() as client:
         task_payload = TaskRequest(
             task="Go to Github and search for \"smooth-sdk\""
         )
         
         try:
-            completed_task = await client.run_and_wait_for_task(task_payload)
+            completed_task = await client.run(task_payload)
             
             if completed_task.result:
                 print("Task Result:", completed_task.result)
@@ -126,10 +126,10 @@ if __name__ == "__main__":
 
 ```python
 import asyncio
-from smooth import AsyncClient
+from smooth import SmoothAsyncClient
 
 async def main():
-    async with AsyncClient() as client:
+    async with SmoothAsyncClient() as client:
         # Get a new browser session
         browser_session = await client.get_browser(session_name="my-async-session")
         print("Live URL:", browser_session.live_url)
