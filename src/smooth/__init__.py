@@ -109,10 +109,10 @@ class BaseClient:
     """Initializes the base client."""
     # Try to get API key from environment if not provided
     if not api_key:
-      api_key = os.getenv("SMOOTH_API_KEY")
+      api_key = os.getenv("CIRCLEMIND_API_KEY")
 
     if not api_key:
-      raise ValueError("API key is required. Provide it directly or set SMOOTH_API_KEY environment variable.")
+      raise ValueError("API key is required. Provide it directly or set CIRCLEMIND_API_KEY environment variable.")
 
     if not base_url:
       raise ValueError("Base URL cannot be empty.")

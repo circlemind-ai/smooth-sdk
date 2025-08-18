@@ -30,10 +30,10 @@ The SDK requires an API key for authentication. You can provide the API key in t
 
 2.  **As an environment variable**:
 
-    Set the `SMOOTH_API_KEY` environment variable, and the client will automatically use it.
+    Set the `CIRCLEMIND_API_KEY` environment variable, and the client will automatically use it.
 
     ```bash
-    export SMOOTH_API_KEY="YOUR_API_KEY"
+    export CIRCLEMIND_API_KEY="YOUR_API_KEY"
     ```
 
     ```python
