@@ -45,6 +45,7 @@ class TaskRequest(BaseModel):
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=1, le=64, description="Maximum number of steps the agent can take (max 64).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
+  enable_recording: bool = Field(default=False, description="(optional) Enable video recording of the task execution.")
   session_id: str | None = Field(
     default=None,
     description="(optional) Browser session ID to use. Each session maintains its own state, such as login credentials.",
@@ -232,6 +233,7 @@ class SmoothClient(BaseClient):
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
+    enable_recording: bool = False,
     session_id: str | None = None,
     stealth_mode: bool = False,
     proxy_server: str | None = None,
@@ -250,6 +252,7 @@ class SmoothClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
+        enable_recording: (optional) Enable video recording of the task execution.
         session_id: (optional) Browser session ID to use.
         stealth_mode: (optional) Run the browser in stealth mode.
         proxy_server: (optional) Proxy server url to route browser traffic through.
@@ -273,6 +276,7 @@ class SmoothClient(BaseClient):
       agent=agent,
       max_steps=max_steps,
       device=device,
+      enable_recording=enable_recording,
       session_id=session_id,
       stealth_mode=stealth_mode,
       proxy_server=proxy_server,
@@ -407,6 +411,7 @@ class SmoothAsyncClient(BaseClient):
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
+    enable_recording: bool = False,
     session_id: str | None = None,
     stealth_mode: bool = False,
     proxy_server: str | None = None,
@@ -425,6 +430,7 @@ class SmoothAsyncClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
+        enable_recording: (optional) Enable video recording of the task execution.
         session_id: (optional) Browser session ID to use.
         stealth_mode: (optional) Run the browser in stealth mode.
         proxy_server: (optional) Proxy server url to route browser traffic through.
@@ -448,6 +454,7 @@ class SmoothAsyncClient(BaseClient):
       agent=agent,
       max_steps=max_steps,
       device=device,
+      enable_recording=enable_recording,
       session_id=session_id,
       stealth_mode=stealth_mode,
       proxy_server=proxy_server,
