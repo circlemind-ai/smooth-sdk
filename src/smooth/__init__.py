@@ -462,8 +462,8 @@ class SmoothAsyncClient(BaseClient):
 
     raise TimeoutError(f"Task {task_id} did not complete within {timeout} seconds.")
 
-  async def get_session(self, session_id: str | None = None, session_name: str | None = None) -> BrowserSessionResponse:
-    """Gets an interactive browser instance asynchronously.
+  async def open_session(self, session_id: str | None = None, session_name: str | None = None) -> BrowserSessionResponse:
+    """Opens an interactive browser instance asynchronously.
 
     Args:
         session_id: The session ID to associate with the browser.

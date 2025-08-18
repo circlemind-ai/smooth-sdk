@@ -80,7 +80,7 @@ from smooth import SmoothClient
 
 with SmoothClient() as client:
     # Get a new browser session
-    browser_session = client.get_browser(session_name="my-test-session")
+    browser_session = client.open_session(session_name="my-test-session")
     print("Live URL:", browser_session.live_url)
     print("Session ID:", browser_session.session_id)
 
@@ -131,7 +131,7 @@ from smooth import SmoothAsyncClient
 async def main():
     async with SmoothAsyncClient() as client:
         # Get a new browser session
-        browser_session = await client.get_browser(session_name="my-async-session")
+        browser_session = await client.open_session(session_name="my-async-session")
         print("Live URL:", browser_session.live_url)
         print("Session ID:", browser_session.session_id)
 
