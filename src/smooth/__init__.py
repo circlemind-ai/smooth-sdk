@@ -40,7 +40,7 @@ class TaskRequest(BaseModel):
 
   task: str = Field(description="The task to run.")
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
-  max_steps: int = Field(default=32, ge=2, le=64, description="Maximum number of steps the agent can take (min 2, max 64).")
+  max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
   enable_recording: bool = Field(default=False, description="Enable video recording of the task execution. Default is False")
   session_id: str | None = Field(
