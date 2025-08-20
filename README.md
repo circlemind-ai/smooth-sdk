@@ -1,12 +1,13 @@
 # Smooth Python SDK
 
-The Smooth Python SDK provides a convenient way to interact with the Smooth API for programmatic browser automation and task execution. This SDK includes both synchronous and asynchronous clients to suit different programming needs.
+The Smooth Python SDK provides a convenient way to interact with the Smooth API for programmatic browser automation and task execution.
 
 ## Features
 
-*   **Synchronous and Asynchronous Clients**: Choose between `SyncClient` for traditional sequential programming and `AsyncClient` for high-performance asynchronous applications.
-*   **Task Management**: Easily run tasks, check their status, and retrieve results.
-*   **Interactive Browser Sessions**: Get access to and manage interactive browser sessions.
+*   **Synchronous and Asynchronous Clients**: Choose between `SmoothClient` for traditional sequential programming and `SmoothAsyncClient` for high-performance asynchronous applications.
+*   **Task Management**: Easily run tasks and retrieve results upon completion.
+*   **Interactive Browser Sessions**: Get access to, interact with, and delete stateful browser sessions to manage your login credentials.
+*   **Advanced Task Configuration**: Customize task execution with options for device type, session recording, stealth mode, and proxy settings.
 
 ## Installation
 
@@ -51,21 +52,31 @@ The `SmoothClient` is ideal for scripts and applications that don't require asyn
 
 #### Running a Task and Waiting for the Result
 
+The `run` method returns a `TaskHandle`. You can use the `result()` method on this handle to wait for the task to complete and get its final state.
+
 ```python
-from smooth import SmoothClient, TaskRequest
+from smooth import SmoothClient
+from smooth.models import ApiError, TimeoutError
 
 with SmoothClient() as client:
-    task_payload = TaskRequest(
-        task="Go to https://www.google.com and search for 'Smooth SDK'"
-    )
-    
     try:
-        completed_task = client.run(task_payload)
+        # The run method returns a handle to the task immediately
+        task_handle = client.run(
+            task="Go to https://www.google.com and search for 'Smooth SDK'",
+            device="desktop",
+            enable_recording=True
+        )
+        print(f"Task submitted with ID: {task_handle.id}")
+        print(f"Live view available at: {task_handle.live_url}")
+
+        # The result() method waits for the task to complete
+        completed_task = task_handle.result()
         
-        if completed_task.result:
-            print("Task Result:", completed_task.result)
+        if completed_task.status == "done":
+            print("Task Result:", completed_task.output)
+            print(f"View recording at: {completed_task.recording_url}")
         else:
-            print("Task Error:", completed_task.error)
+            print("Task Failed:", completed_task.output)
             
     except TimeoutError:
         print("The task timed out.")
@@ -75,18 +86,24 @@ with SmoothClient() as client:
 
 #### Managing Browser Sessions
 
+You can create, list, and delete browser sessions to maintain state (like logins) between tasks.
+
 ```python
 from smooth import SmoothClient
 
 with SmoothClient() as client:
-    # Get a new browser session
-    browser_session = client.open_session(session_name="my-test-session")
+    # Create a new browser session
+    browser_session = client.open_session()
     print("Live URL:", browser_session.live_url)
     print("Session ID:", browser_session.session_id)
 
     # List all browser sessions
     sessions = client.list_sessions()
     print("All Session IDs:", sessions.session_ids)
+
+    # Delete the browser session
+    client.delete_session(session_id=session_id)
+    print(f"Session '{session_id}' deleted.")
 ```
 
 ### Asynchronous Client
@@ -95,49 +112,35 @@ The `SmoothAsyncClient` is designed for use in asynchronous applications, such a
 
 #### Running a Task and Waiting for the Result
 
+The `run` method returns an `AsyncTaskHandle`. Await the `result()` method on the handle to get the final task status.
+
 ```python
 import asyncio
-from smooth import SmoothAsyncClient, TaskRequest
+from smooth import SmoothAsyncClient
+from smooth.models import ApiError, TimeoutError
 
 async def main():
     async with SmoothAsyncClient() as client:
-        task_payload = TaskRequest(
-            task="Go to Github and search for \"smooth-sdk\""
-        )
-        
         try:
-            completed_task = await client.run(task_payload)
+            # The run method returns a handle to the task immediately
+            task_handle = await client.run(
+                task="Go to Github and search for \"smooth-sdk\""
+            )
+            print(f"Task submitted with ID: {task_handle.id}")
+            print(f"Live view available at: {task_handle.live_url}")
+
+            # The result() method waits for the task to complete
+            completed_task = await task_handle.result()
             
-            if completed_task.result:
-                print("Task Result:", completed_task.result)
+            if completed_task.status == "done":
+                print("Task Result:", completed_task.output)
             else:
-                print("Task Error:", completed_task.error)
+                print("Task Failed:", completed_task.output)
                 
         except TimeoutError:
             print("The task timed out.")
         except ApiError as e:
             print(f"An API error occurred: {e}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-#### Managing Browser Sessions
-
-```python
-import asyncio
-from smooth import SmoothAsyncClient
-
-async def main():
-    async with SmoothAsyncClient() as client:
-        # Get a new browser session
-        browser_session = await client.open_session(session_name="my-async-session")
-        print("Live URL:", browser_session.live_url)
-        print("Session ID:", browser_session.session_id)
-
-        # List all browser sessions
-        sessions = await client.list_sessions()
-        print("All Session IDs:", sessions.session_ids)
 
 if __name__ == "__main__":
     asyncio.run(main())

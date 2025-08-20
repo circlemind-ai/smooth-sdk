@@ -11,7 +11,7 @@ from typing import (
 
 import httpx
 import requests
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 # Configure logging
 logger = logging.getLogger("smooth")
@@ -26,24 +26,21 @@ BASE_URL = "https://api2.circlemind.co/api/"
 class TaskResponse(BaseModel):
   """Task response model."""
 
-  model_config = ConfigDict(extra="forbid")
-
   id: str = Field(description="The ID of the task.")
   status: Literal["waiting", "running", "done", "failed"] = Field(description="The status of the task.")
-  result: Any | None = Field(default=None, description="The result of the task if successful.")
-  error: str | None = Field(default=None, description="Error message if the task failed.")
+  output: Any | None = Field(default=None, description="The output of the task.")
   credits_used: int | None = Field(default=None, description="The amount of credits used to perform the task.")
-  url: str | None = Field(default=None, description="The URL to view the task execution.")
+  device: Literal["desktop", "mobile"] | None = Field(default=None, description="The device type used for the task.")
+  live_url: str | None = Field(default=None, description="The URL to view and interact with the task execution.")
+  recording_url: str | None = Field(default=None, description="The URL to view the task recording.")
 
 
 class TaskRequest(BaseModel):
   """Run task request model."""
 
-  model_config = ConfigDict(extra="forbid")
-
   task: str = Field(description="The task to run.")
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
-  max_steps: int = Field(default=32, ge=1, le=64, description="Maximum number of steps the agent can take (max 64).")
+  max_steps: int = Field(default=32, ge=2, le=64, description="Maximum number of steps the agent can take (min 2, max 64).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
   enable_recording: bool = Field(default=False, description="Enable video recording of the task execution. Default is False")
   session_id: str | None = Field(
@@ -54,8 +51,7 @@ class TaskRequest(BaseModel):
   proxy_server: str | None = Field(
     default=None,
     description=(
-      "Proxy server url to route browser traffic through."
-      " Must include the protocol to use (e.g. http:// or https://)"
+      "Proxy server url to route browser traffic through." " Must include the protocol to use (e.g. http:// or https://)"
     ),
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
@@ -66,17 +62,13 @@ class BrowserSessionRequest(BaseModel):
   """Request model for creating a browser session."""
 
   session_id: str | None = Field(
-    default=None, description="The session ID to associate to the browser instance. If None, a new session will be created."
-  )
-  session_name: str | None = Field(
-    default=None, description="The name to associate to the new browser session. Ignored if a valid session_id is provided."
+    default=None,
+    description=("The session ID to open in the browser. If None, a new session will be created with a random name."),
   )
 
 
 class BrowserSessionResponse(BaseModel):
   """Browser session response model."""
-
-  model_config = ConfigDict(extra="forbid")
 
   live_url: str = Field(description="The live URL to interact with the browser session.")
   session_id: str = Field(description="The ID of the browser session associated with the opened browser instance.")
@@ -86,7 +78,6 @@ class BrowserSessionsResponse(BaseModel):
   """Response model for listing browser sessions."""
 
   session_ids: list[str] = Field(description="The IDs of the browser sessions.")
-  session_names: list[str | None] = Field(description="The names of the browser sessions.")
 
 
 # --- Exception Handling ---
@@ -132,7 +123,7 @@ class BaseClient:
     self.headers = {
       "apikey": self.api_key,
       "Content-Type": "application/json",
-      "User-Agent": "smooth-python-sdk/0.1.0",
+      "User-Agent": "smooth-python-sdk/0.1.1",
     }
 
   def _handle_response(self, response: requests.Response | httpx.Response) -> dict[str, Any]:
@@ -159,6 +150,34 @@ class BaseClient:
 # --- Synchronous Client ---
 
 
+class TaskHandle:
+  """A handle to a running task."""
+
+  def __init__(self, task_id: str, client: "SmoothClient", live_url: str | None, poll_interval: int, timeout: int | None):
+    """Initializes the task handle."""
+    self._client = client
+    self._poll_interval = poll_interval
+    self._timeout = timeout
+    self._task_response: TaskResponse | None = None
+
+    self.id = task_id
+    self.live_url = live_url
+
+  def result(self) -> TaskResponse:
+    """Waits for the task to complete and returns the result."""
+    if self._task_response and self._task_response.status not in ["running", "waiting"]:
+      return self._task_response
+
+    start_time = time.time()
+    while self._timeout is None or (time.time() - start_time) < self._timeout:
+      task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      if task_response.status not in ["running", "waiting"]:
+        self._task_response = task_response
+        return task_response
+      time.sleep(self._poll_interval)
+    raise TimeoutError(f"Task {self.id} did not complete within {self._timeout} seconds.")
+
+
 class SmoothClient(BaseClient):
   """A synchronous client for the API."""
 
@@ -181,18 +200,8 @@ class SmoothClient(BaseClient):
     if hasattr(self, "_session"):
       self._session.close()
 
-  def submit_task(self, payload: TaskRequest) -> TaskResponse:
-    """Submits a task to be run.
-
-    Args:
-        payload: The request object containing task details.
-
-    Returns:
-        The initial response for the submitted task.
-
-    Raises:
-        ApiException: If the API request fails.
-    """
+  def _submit_task(self, payload: TaskRequest) -> TaskResponse:
+    """Submits a task to be run."""
     try:
       response = self._session.post(f"{self.base_url}/task", json=payload.model_dump(exclude_none=True))
       data = self._handle_response(response)
@@ -201,19 +210,8 @@ class SmoothClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  def get_task(self, task_id: str) -> TaskResponse:
-    """Retrieves the status and result of a task.
-
-    Args:
-        task_id: The ID of the task to retrieve.
-
-    Returns:
-        The current status and data of the task.
-
-    Raises:
-        ApiException: If the API request fails.
-        ValueError: If task_id is empty.
-    """
+  def _get_task(self, task_id: str) -> TaskResponse:
+    """Retrieves the status and result of a task."""
     if not task_id:
       raise ValueError("Task ID cannot be empty.")
 
@@ -239,11 +237,11 @@ class SmoothClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
-  ) -> TaskResponse:
-    """Runs a task and waits for it to complete.
+  ) -> TaskHandle:
+    """Runs a task and returns a handle to the task.
 
-    This method submits a task and then polls the get_task endpoint
-    until the task's status is no longer 'running' or 'waiting'.
+    This method submits a task and returns a `TaskHandle` object
+    that can be used to get the result of the task.
 
     Args:
         task: The task to run.
@@ -260,10 +258,9 @@ class SmoothClient(BaseClient):
         proxy_password: Proxy server password.
 
     Returns:
-        The final response of the completed or failed task.
+        A handle to the running task.
 
     Raises:
-        TimeoutError: If the task does not complete within the specified timeout.
         ApiException: If the API request fails.
     """
     if poll_interval < 0.1:
@@ -283,27 +280,19 @@ class SmoothClient(BaseClient):
       proxy_username=proxy_username,
       proxy_password=proxy_password,
     )
-
+    initial_response = self._submit_task(payload)
     start_time = time.time()
-    initial_response = self.submit_task(payload)
-    task_id = initial_response.id
-
-    while (time.time() - start_time) < timeout:
-      task_response = self.get_task(task_id)
-
-      if task_response.status not in ["running", "waiting"]:
-        return task_response
-
+    while time.time() - start_time < 16 and initial_response.live_url is None:
+      initial_response = self._get_task(initial_response.id)
       time.sleep(poll_interval)
 
-    raise TimeoutError(f"Task {task_id} did not complete within {timeout} seconds.")
+    return TaskHandle(initial_response.id, self, initial_response.live_url, poll_interval, timeout)
 
-  def open_session(self, session_id: str | None = None, session_name: str | None = None) -> BrowserSessionResponse:
+  def open_session(self, session_id: str | None = None) -> BrowserSessionResponse:
     """Gets an interactive browser instance.
 
     Args:
         session_id: The session ID to associate with the browser. If None, a new session will be created.
-        session_name: The name to associate to the new browser session. Ignored if a valid session_id is provided.
 
     Returns:
         The browser session details, including the live URL.
@@ -314,7 +303,7 @@ class SmoothClient(BaseClient):
     try:
       response = self._session.post(
         f"{self.base_url}/browser/session",
-        json=BrowserSessionRequest(session_id=session_id, session_name=session_name).model_dump(exclude_none=True),
+        json=BrowserSessionRequest(session_id=session_id).model_dump(exclude_none=True),
       )
       data = self._handle_response(response)
       return BrowserSessionResponse(**data["r"])
@@ -339,8 +328,45 @@ class SmoothClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  def delete_session(self, session_id: str):
+    """Delete a browser session."""
+    try:
+      response = self._session.delete(f"{self.base_url}/browser/session/{session_id}")
+      self._handle_response(response)
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
 
 # --- Asynchronous Client ---
+
+
+class AsyncTaskHandle:
+  """An asynchronous handle to a running task."""
+
+  def __init__(self, task_id: str, client: "SmoothAsyncClient", live_url: str | None, poll_interval: int, timeout: int | None):
+    """Initializes the asynchronous task handle."""
+    self._client = client
+    self._poll_interval = poll_interval
+    self._timeout = timeout
+    self._task_response: TaskResponse | None = None
+
+    self.id = task_id
+    self.live_url = live_url
+
+  async def result(self) -> TaskResponse:
+    """Waits for the task to complete and returns the result."""
+    if self._task_response and self._task_response.status not in ["running", "waiting"]:
+      return self._task_response
+
+    start_time = time.time()
+    while self._timeout is None or (time.time() - start_time) < self._timeout:
+      task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      if task_response.status not in ["running", "waiting"]:
+        self._task_response = task_response
+        return task_response
+      await asyncio.sleep(self._poll_interval)
+    raise TimeoutError(f"Task {self.id} did not complete within {self._timeout} seconds.")
 
 
 class SmoothAsyncClient(BaseClient):
@@ -359,18 +385,8 @@ class SmoothAsyncClient(BaseClient):
     """Exits the asynchronous context manager."""
     await self.close()
 
-  async def submit_task(self, payload: TaskRequest) -> TaskResponse:
-    """Submits a task to be run asynchronously.
-
-    Args:
-        payload: The request object containing task details.
-
-    Returns:
-        The initial response for the submitted task.
-
-    Raises:
-        ApiException: If the API request fails.
-    """
+  async def _submit_task(self, payload: TaskRequest) -> TaskResponse:
+    """Submits a task to be run asynchronously."""
     try:
       response = await self._client.post(f"{self.base_url}/task", json=payload.model_dump(exclude_none=True))
       data = self._handle_response(response)
@@ -379,19 +395,8 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  async def get_task(self, task_id: str) -> TaskResponse:
-    """Retrieves the status and result of a task asynchronously.
-
-    Args:
-        task_id: The ID of the task to retrieve.
-
-    Returns:
-        The current status and data of the task.
-
-    Raises:
-        ApiException: If the API request fails.
-        ValueError: If task_id is empty.
-    """
+  async def _get_task(self, task_id: str) -> TaskResponse:
+    """Retrieves the status and result of a task asynchronously."""
     if not task_id:
       raise ValueError("Task ID cannot be empty.")
 
@@ -417,11 +422,11 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
-  ) -> TaskResponse:
-    """Runs a task and waits for it to complete asynchronously.
+  ) -> AsyncTaskHandle:
+    """Runs a task and returns a handle to the task asynchronously.
 
-    This method submits a task and then polls the get_task endpoint
-    until the task's status is no longer 'running' or 'waiting'.
+    This method submits a task and returns an `AsyncTaskHandle` object
+    that can be used to get the result of the task.
 
     Args:
         task: The task to run.
@@ -438,10 +443,9 @@ class SmoothAsyncClient(BaseClient):
         proxy_password: Proxy server password.
 
     Returns:
-        The final response of the completed or failed task.
+        A handle to the running task.
 
     Raises:
-        TimeoutError: If the task does not complete within the specified timeout.
         ApiException: If the API request fails.
     """
     if poll_interval < 0.1:
@@ -462,26 +466,18 @@ class SmoothAsyncClient(BaseClient):
       proxy_password=proxy_password,
     )
 
+    initial_response = await self._submit_task(payload)
     start_time = time.time()
-    initial_response = await self.submit_task(payload)
-    task_id = initial_response.id
-
-    while (time.time() - start_time) < timeout:
-      task_response = await self.get_task(task_id)
-
-      if task_response.status not in ["running", "waiting"]:
-        return task_response
-
+    while time.time() - start_time < 16 and initial_response.live_url is None:
+      initial_response = await self._get_task(initial_response.id)
       await asyncio.sleep(poll_interval)
+    return AsyncTaskHandle(initial_response.id, self, initial_response.live_url, poll_interval, timeout)
 
-    raise TimeoutError(f"Task {task_id} did not complete within {timeout} seconds.")
-
-  async def open_session(self, session_id: str | None = None, session_name: str | None = None) -> BrowserSessionResponse:
+  async def open_session(self, session_id: str | None = None) -> BrowserSessionResponse:
     """Opens an interactive browser instance asynchronously.
 
     Args:
         session_id: The session ID to associate with the browser.
-        session_name: The name for a new browser session.
 
     Returns:
         The browser session details, including the live URL.
@@ -492,7 +488,7 @@ class SmoothAsyncClient(BaseClient):
     try:
       response = await self._client.post(
         f"{self.base_url}/browser/session",
-        json=BrowserSessionRequest(session_id=session_id, session_name=session_name).model_dump(exclude_none=True),
+        json=BrowserSessionRequest(session_id=session_id).model_dump(exclude_none=True),
       )
       data = self._handle_response(response)
       return BrowserSessionResponse(**data["r"])
@@ -513,6 +509,15 @@ class SmoothAsyncClient(BaseClient):
       response = await self._client.get(f"{self.base_url}/browser/session")
       data = self._handle_response(response)
       return BrowserSessionsResponse(**data["r"])
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def delete_session(self, session_id: str):
+    """Delete a browser session."""
+    try:
+      response = await self._client.delete(f"{self.base_url}/browser/session/{session_id}")
+      self._handle_response(response)
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
