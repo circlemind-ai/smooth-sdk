@@ -154,51 +154,65 @@ class BaseClient:
 class TaskHandle:
   """A handle to a running task."""
 
-  def __init__(self, task_id: str, client: "SmoothClient", live_url: str | None, poll_interval: int, timeout: int | None):
+  def __init__(self, task_id: str, client: "SmoothClient"):
     """Initializes the task handle."""
     self._client = client
-    self._poll_interval = poll_interval
-    self._timeout = timeout
     self._task_response: TaskResponse | None = None
-    self._live_url = live_url
 
     self.id = task_id
 
-  def result(self) -> TaskResponse:
+  def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
     if self._task_response and self._task_response.status not in ["running", "waiting"]:
       return self._task_response
 
-    start_time = time.time()
-    while self._timeout is None or (time.time() - start_time) < self._timeout:
-      task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
-      if task_response.status not in ["running", "waiting"]:
-        self._task_response = task_response
-        return task_response
-      time.sleep(self._poll_interval)
-    raise TimeoutError(f"Task {self.id} did not complete within {self._timeout} seconds.")
+    if timeout is not None and timeout < 1:
+      raise ValueError("Timeout must be at least 1 second.")
+    if poll_interval < 0.1:
+      raise ValueError("Poll interval must be at least 100 milliseconds.")
 
-  def live_url(self, interactive: bool = True, embed: bool = False) -> str:
+    start_time = time.time()
+    while timeout is None or (time.time() - start_time) < timeout:
+      task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      self._task_response = task_response
+      if task_response.status not in ["running", "waiting"]:
+        return task_response
+      time.sleep(poll_interval)
+    raise TimeoutError(f"Task {self.id} did not complete within {timeout} seconds.")
+
+  def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
     params = {
       "interactive": interactive,
       "embed": embed
     }
-    return f"{self._live_url}?{urlencode(params)}"
 
-  def recording_url(self) -> str:
+    if self._task_response and self._task_response.live_url:
+      return f"{self._task_response.live_url}?{urlencode(params)}"
+
+    start_time = time.time()
+    while timeout is None or (time.time() - start_time) < timeout:
+      task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      self._task_response = task_response
+      if self._task_response.live_url:
+        return f"{self._task_response.live_url}?{urlencode(params)}"
+      time.sleep(1)
+
+    raise TimeoutError(f"Live URL not available for task {self.id}.")
+
+  def recording_url(self, timeout: int | None = None) -> str:
     """Returns the recording URL for the task."""
     if self._task_response and self._task_response.recording_url is not None:
       return self._task_response.recording_url
 
     start_time = time.time()
-    while (time.time() - start_time) < 8:
+    while timeout is None or (time.time() - start_time) < timeout:
       task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
       self._task_response = task_response
       if task_response.recording_url is not None:
         return task_response.recording_url
       time.sleep(1)
-    raise TimeoutError(f"Recording not available for task {self.id}.")
+    raise TimeoutError(f"Recording URL not available for task {self.id}.")
 
 
 class SmoothClient(BaseClient):
@@ -249,8 +263,6 @@ class SmoothClient(BaseClient):
   def run(
     self,
     task: str,
-    poll_interval: int = 1,
-    timeout: int = 60 * 15,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -268,8 +280,6 @@ class SmoothClient(BaseClient):
 
     Args:
         task: The task to run.
-        poll_interval: The time in seconds to wait between polling for status.
-        timeout: The maximum time in seconds to wait for the task to complete.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -286,11 +296,6 @@ class SmoothClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
-    if poll_interval < 0.1:
-      raise ValueError("Poll interval must be at least 100 milliseconds.")
-    if timeout < 1:
-      raise ValueError("Timeout must be at least 1 second.")
-
     payload = TaskRequest(
       task=task,
       agent=agent,
@@ -304,12 +309,8 @@ class SmoothClient(BaseClient):
       proxy_password=proxy_password,
     )
     initial_response = self._submit_task(payload)
-    start_time = time.time()
-    while time.time() - start_time < 16 and initial_response.live_url is None:
-      initial_response = self._get_task(initial_response.id)
-      time.sleep(poll_interval)
 
-    return TaskHandle(initial_response.id, self, initial_response.live_url, poll_interval, timeout)
+    return TaskHandle(initial_response.id, self)
 
   def open_session(self, session_id: str | None = None) -> BrowserSessionResponse:
     """Gets an interactive browser instance.
@@ -367,51 +368,65 @@ class SmoothClient(BaseClient):
 class AsyncTaskHandle:
   """An asynchronous handle to a running task."""
 
-  def __init__(self, task_id: str, client: "SmoothAsyncClient", live_url: str | None, poll_interval: int, timeout: int | None):
+  def __init__(self, task_id: str, client: "SmoothAsyncClient"):
     """Initializes the asynchronous task handle."""
     self._client = client
-    self._poll_interval = poll_interval
-    self._timeout = timeout
-    self._live_url = live_url
     self._task_response: TaskResponse | None = None
 
     self.id = task_id
 
-  async def result(self) -> TaskResponse:
+  async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
     if self._task_response and self._task_response.status not in ["running", "waiting"]:
       return self._task_response
 
+    if timeout is not None and timeout < 1:
+      raise ValueError("Timeout must be at least 1 second.")
+    if poll_interval < 0.1:
+      raise ValueError("Poll interval must be at least 100 milliseconds.")
+
     start_time = time.time()
-    while self._timeout is None or (time.time() - start_time) < self._timeout:
+    while timeout is None or (time.time() - start_time) < timeout:
       task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
       self._task_response = task_response
       if task_response.status not in ["running", "waiting"]:
         return task_response
-      await asyncio.sleep(self._poll_interval)
-    raise TimeoutError(f"Task {self.id} did not complete within {self._timeout} seconds.")
+      await asyncio.sleep(poll_interval)
+    raise TimeoutError(f"Task {self.id} did not complete within {timeout} seconds.")
 
-  def live_url(self, interactive: bool = True, embed: bool = False) -> str:
+  async def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
     params = {
       "interactive": interactive,
       "embed": embed
     }
-    return f"{self._live_url}?{urlencode(params)}"
+    if self._task_response and self._task_response.live_url:
+      return f"{self._task_response.live_url}?{urlencode(params)}"
 
-  async def recording_url(self) -> str:
+    start_time = time.time()
+    while timeout is None or (time.time() - start_time) < timeout:
+      task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      self._task_response = task_response
+      if task_response.live_url is not None:
+        return f"{task_response.live_url}?{urlencode(params)}"
+      await asyncio.sleep(1)
+
+    raise TimeoutError(f"Live URL not available for task {self.id}.")
+
+  async def recording_url(self, timeout: int | None = None):
     """Returns the recording URL for the task."""
     if self._task_response and self._task_response.recording_url is not None:
       return self._task_response.recording_url
 
     start_time = time.time()
-    while (time.time() - start_time) < 8:
+    while timeout is None or (time.time() - start_time) < timeout:
       task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
       self._task_response = task_response
       if task_response.recording_url is not None:
         return task_response.recording_url
       await asyncio.sleep(1)
-    raise TimeoutError(f"Recording not available for task {self.id}.")
+
+    raise TimeoutError(f"Recording URL not available for task {self.id}.")
 
 class SmoothAsyncClient(BaseClient):
   """An asynchronous client for the API."""
@@ -464,8 +479,6 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
-    poll_interval: int = 1,
-    timeout: int = 60 * 15,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
 
@@ -492,11 +505,6 @@ class SmoothAsyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
-    if poll_interval < 0.1:
-      raise ValueError("Poll interval must be at least 100 milliseconds.")
-    if timeout < 1:
-      raise ValueError("Timeout must be at least 1 second.")
-
     payload = TaskRequest(
       task=task,
       agent=agent,
@@ -511,11 +519,7 @@ class SmoothAsyncClient(BaseClient):
     )
 
     initial_response = await self._submit_task(payload)
-    start_time = time.time()
-    while time.time() - start_time < 16 and initial_response.live_url is None:
-      initial_response = await self._get_task(initial_response.id)
-      await asyncio.sleep(poll_interval)
-    return AsyncTaskHandle(initial_response.id, self, initial_response.live_url, poll_interval, timeout)
+    return AsyncTaskHandle(initial_response.id, self)
 
   async def open_session(self, session_id: str | None = None) -> BrowserSessionResponse:
     """Opens an interactive browser instance asynchronously.
