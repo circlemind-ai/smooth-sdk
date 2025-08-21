@@ -8,6 +8,7 @@ from typing import (
   Any,
   Literal,
 )
+from urllib.parse import urlencode
 
 import httpx
 import requests
@@ -42,7 +43,7 @@ class TaskRequest(BaseModel):
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
-  enable_recording: bool = Field(default=False, description="Enable video recording of the task execution. Default is False")
+  enable_recording: bool = Field(default=True, description="Enable video recording of the task execution. Default is True")
   session_id: str | None = Field(
     default=None,
     description="Browser session ID to use. Each session maintains its own state, such as login credentials.",
@@ -51,7 +52,7 @@ class TaskRequest(BaseModel):
   proxy_server: str | None = Field(
     default=None,
     description=(
-      "Proxy server url to route browser traffic through." " Must include the protocol to use (e.g. http:// or https://)"
+      "Proxy server url to route browser traffic through. Must include the protocol to use (e.g. http:// or https://)"
     ),
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
@@ -159,9 +160,9 @@ class TaskHandle:
     self._poll_interval = poll_interval
     self._timeout = timeout
     self._task_response: TaskResponse | None = None
+    self._live_url = live_url
 
     self.id = task_id
-    self.live_url = live_url
 
   def result(self) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
@@ -176,6 +177,28 @@ class TaskHandle:
         return task_response
       time.sleep(self._poll_interval)
     raise TimeoutError(f"Task {self.id} did not complete within {self._timeout} seconds.")
+
+  def live_url(self, interactive: bool = True, embed: bool = False) -> str:
+    """Returns the live URL for the task."""
+    params = {
+      "interactive": interactive,
+      "embed": embed
+    }
+    return f"{self._live_url}?{urlencode(params)}"
+
+  def recording_url(self) -> str:
+    """Returns the recording URL for the task."""
+    if self._task_response and self._task_response.recording_url is not None:
+      return self._task_response.recording_url
+
+    start_time = time.time()
+    while (time.time() - start_time) < 8:
+      task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      self._task_response = task_response
+      if task_response.recording_url is not None:
+        return task_response.recording_url
+      time.sleep(1)
+    raise TimeoutError(f"Recording not available for task {self.id}.")
 
 
 class SmoothClient(BaseClient):
@@ -349,10 +372,10 @@ class AsyncTaskHandle:
     self._client = client
     self._poll_interval = poll_interval
     self._timeout = timeout
+    self._live_url = live_url
     self._task_response: TaskResponse | None = None
 
     self.id = task_id
-    self.live_url = live_url
 
   async def result(self) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
@@ -362,12 +385,33 @@ class AsyncTaskHandle:
     start_time = time.time()
     while self._timeout is None or (time.time() - start_time) < self._timeout:
       task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      self._task_response = task_response
       if task_response.status not in ["running", "waiting"]:
-        self._task_response = task_response
         return task_response
       await asyncio.sleep(self._poll_interval)
     raise TimeoutError(f"Task {self.id} did not complete within {self._timeout} seconds.")
 
+  def live_url(self, interactive: bool = True, embed: bool = False) -> str:
+    """Returns the live URL for the task."""
+    params = {
+      "interactive": interactive,
+      "embed": embed
+    }
+    return f"{self._live_url}?{urlencode(params)}"
+
+  async def recording_url(self) -> str:
+    """Returns the recording URL for the task."""
+    if self._task_response and self._task_response.recording_url is not None:
+      return self._task_response.recording_url
+
+    start_time = time.time()
+    while (time.time() - start_time) < 8:
+      task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      self._task_response = task_response
+      if task_response.recording_url is not None:
+        return task_response.recording_url
+      await asyncio.sleep(1)
+    raise TimeoutError(f"Recording not available for task {self.id}.")
 
 class SmoothAsyncClient(BaseClient):
   """An asynchronous client for the API."""
@@ -411,8 +455,6 @@ class SmoothAsyncClient(BaseClient):
   async def run(
     self,
     task: str,
-    poll_interval: int = 1,
-    timeout: int = 60 * 15,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -422,6 +464,8 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    poll_interval: int = 1,
+    timeout: int = 60 * 15,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
 
@@ -430,8 +474,6 @@ class SmoothAsyncClient(BaseClient):
 
     Args:
         task: The task to run.
-        poll_interval: The time in seconds to wait between polling for status.
-        timeout: The maximum time in seconds to wait for the task to complete.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -441,6 +483,8 @@ class SmoothAsyncClient(BaseClient):
         proxy_server: Proxy server url to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
+        poll_interval: The time in seconds to wait between polling for status.
+        timeout: The maximum time in seconds to wait for the task to complete.
 
     Returns:
         A handle to the running task.
