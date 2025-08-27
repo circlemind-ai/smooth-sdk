@@ -4,11 +4,11 @@ import asyncio
 import logging
 import os
 import time
+import urllib.parse
 from typing import (
   Any,
   Literal,
 )
-from urllib.parse import urlencode
 
 import httpx
 import requests
@@ -19,6 +19,20 @@ logger = logging.getLogger("smooth")
 
 
 BASE_URL = "https://api2.circlemind.co/api/"
+
+
+# --- Utils ---
+
+
+def _encode_url(url: str, interactive: bool = True, embed: bool = False) -> str:
+  parsed_url = urllib.parse.urlparse(url)
+  params = urllib.parse.parse_qs(parsed_url.query)
+  params.update({
+    "interactive": "true" if interactive else "false",
+    "embed": "true" if embed else "false"
+  })
+  return urllib.parse.urlunparse(parsed_url._replace(query=urllib.parse.urlencode(params)))
+
 
 # --- Models ---
 # These models define the data structures for API requests and responses.
@@ -151,6 +165,20 @@ class BaseClient:
 # --- Synchronous Client ---
 
 
+class BrowserSessionHandle(BaseModel):
+  """Browser session handle model."""
+
+  browser_session: BrowserSessionResponse = Field(description="The browser session associated with this handle.")
+
+  def session_id(self):
+    """Returns the session ID for the browser session."""
+    return self.browser_session.session_id
+
+  def live_url(self, interactive: bool = True, embed: bool = False):
+    """Returns the live URL for the browser session."""
+    return _encode_url(self.browser_session.live_url, interactive=interactive, embed=embed)
+
+
 class TaskHandle:
   """A handle to a running task."""
 
@@ -182,20 +210,15 @@ class TaskHandle:
 
   def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
-    params = {
-      "interactive": interactive,
-      "embed": embed
-    }
-
     if self._task_response and self._task_response.live_url:
-      return f"{self._task_response.live_url}?{urlencode(params)}"
+      return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
       task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
       self._task_response = task_response
       if self._task_response.live_url:
-        return f"{self._task_response.live_url}?{urlencode(params)}"
+        return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
       time.sleep(1)
 
     raise TimeoutError(f"Live URL not available for task {self.id}.")
@@ -312,7 +335,7 @@ class SmoothClient(BaseClient):
 
     return TaskHandle(initial_response.id, self)
 
-  def open_session(self, session_id: str | None = None) -> BrowserSessionResponse:
+  def open_session(self, session_id: str | None = None) -> BrowserSessionHandle:
     """Gets an interactive browser instance.
 
     Args:
@@ -330,7 +353,7 @@ class SmoothClient(BaseClient):
         json=BrowserSessionRequest(session_id=session_id).model_dump(exclude_none=True),
       )
       data = self._handle_response(response)
-      return BrowserSessionResponse(**data["r"])
+      return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
@@ -396,19 +419,15 @@ class AsyncTaskHandle:
 
   async def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
-    params = {
-      "interactive": interactive,
-      "embed": embed
-    }
     if self._task_response and self._task_response.live_url:
-      return f"{self._task_response.live_url}?{urlencode(params)}"
+      return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
       task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
       self._task_response = task_response
       if task_response.live_url is not None:
-        return f"{task_response.live_url}?{urlencode(params)}"
+        return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
       await asyncio.sleep(1)
 
     raise TimeoutError(f"Live URL not available for task {self.id}.")
@@ -521,7 +540,7 @@ class SmoothAsyncClient(BaseClient):
     initial_response = await self._submit_task(payload)
     return AsyncTaskHandle(initial_response.id, self)
 
-  async def open_session(self, session_id: str | None = None) -> BrowserSessionResponse:
+  async def open_session(self, session_id: str | None = None) -> BrowserSessionHandle:
     """Opens an interactive browser instance asynchronously.
 
     Args:
@@ -539,7 +558,7 @@ class SmoothAsyncClient(BaseClient):
         json=BrowserSessionRequest(session_id=session_id).model_dump(exclude_none=True),
       )
       data = self._handle_response(response)
-      return BrowserSessionResponse(**data["r"])
+      return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
