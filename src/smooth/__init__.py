@@ -49,7 +49,7 @@ class TaskRequest(BaseModel):
 
   task: str = Field(description="The task to run.")
   response_model: dict[str, Any] | None = Field(
-    default=None, description="If provided, the schema describing the desired output structure. Default is None"
+    default=None, description="If provided, the JSON schema describing the desired output structure. Default is None"
   )
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
@@ -136,7 +136,7 @@ class BaseClient:
     self.headers = {
       "apikey": self.api_key,
       "Content-Type": "application/json",
-      "User-Agent": "smooth-python-sdk/0.1.1",
+      "User-Agent": "smooth-python-sdk/0.2.0",
     }
 
   def _handle_response(self, response: requests.Response | httpx.Response) -> dict[str, Any]:
@@ -187,7 +187,11 @@ class TaskHandle:
     self._client = client
     self._task_response: TaskResponse | None = None
 
-    self.id = task_id
+    self._id = task_id
+
+  def id(self):
+    """Returns the task ID."""
+    return self._id
 
   def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
