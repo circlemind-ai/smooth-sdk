@@ -8,6 +8,7 @@ The Smooth Python SDK provides a convenient way to interact with the Smooth API 
 *   **Task Management**: Easily run tasks and retrieve results upon completion.
 *   **Interactive Browser Sessions**: Get access to, interact with, and delete stateful browser sessions to manage your login credentials.
 *   **Advanced Task Configuration**: Customize task execution with options for device type, session recording, stealth mode, and proxy settings.
+*   **🆕 MCP Server**: Use the included Model Context Protocol server to integrate browser automation with AI assistants like Claude Desktop.
 
 ## Installation
 
@@ -16,6 +17,51 @@ You can install the Smooth Python SDK using pip:
 ```bash
 pip install smooth-py
 ```
+
+For MCP server functionality, also install FastMCP:
+
+```bash
+pip install fastmcp
+```
+
+## Quick Start Options
+
+### Option 1: Direct SDK Usage
+
+Use the SDK directly in your Python applications:
+
+### Option 2: MCP Server (AI Assistant Integration)
+
+Use the included MCP server to integrate browser automation with AI assistants:
+
+#### Installation
+```bash
+# Install with MCP support
+pip install smooth-py[mcp]
+```
+
+#### Basic Usage
+```python
+from smooth.mcp import SmoothMCP
+
+# Create and run the MCP server  
+mcp = SmoothMCP(api_key="your-api-key")
+mcp.run()  # STDIO transport for Claude Desktop
+
+# Or with HTTP transport for web deployment
+mcp.run(transport="http", host="0.0.0.0", port=8000)
+```
+
+#### Standalone Script (Backward Compatible)
+```bash
+# Set your API key
+export CIRCLEMIND_API_KEY="your-api-key-here"
+
+# Run the MCP server
+python mcp_server.py
+```
+
+Then configure your AI assistant (like Claude Desktop) to use the MCP server. See [MCP_README.md](MCP_README.md) for detailed setup instructions.
 
 ## Authentication
 
@@ -145,3 +191,32 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 ```
+
+## MCP Server (AI Assistant Integration)
+
+The Smooth SDK includes a Model Context Protocol (MCP) server that allows AI assistants like Claude Desktop or Cursor to perform browser automation tasks through natural language commands.
+
+### Installation
+
+```bash
+pip install smooth-py[mcp]
+```
+
+### Basic Usage
+
+```python
+from smooth.mcp import SmoothMCP
+
+# Create and run the MCP server
+mcp = SmoothMCP(api_key="your-api-key")
+mcp.run()
+```
+
+### Example MCP Usage
+
+Once configured, you can ask your MCP client to perform browser automation:
+
+- "Please go to news.ycombinator.com and get the top 5 story titles"
+- "Create a browser session, log into Gmail, and check for unread emails"
+- "Go to Amazon and search for wireless headphones under $100"
+- "Fill out the contact form at example.com with test data"
