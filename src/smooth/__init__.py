@@ -27,10 +27,7 @@ BASE_URL = "https://api2.circlemind.co/api/"
 def _encode_url(url: str, interactive: bool = True, embed: bool = False) -> str:
   parsed_url = urllib.parse.urlparse(url)
   params = urllib.parse.parse_qs(parsed_url.query)
-  params.update({
-    "interactive": "true" if interactive else "false",
-    "embed": "true" if embed else "false"
-  })
+  params.update({"interactive": "true" if interactive else "false", "embed": "true" if embed else "false"})
   return urllib.parse.urlunparse(parsed_url._replace(query=urllib.parse.urlencode(params)))
 
 
@@ -54,6 +51,9 @@ class TaskRequest(BaseModel):
   """Run task request model."""
 
   task: str = Field(description="The task to run.")
+  response_model: dict[str, Any] | None = Field(
+    default=None, description="If provided, the schema describing the desired output structure. Default is None"
+  )
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
@@ -80,13 +80,14 @@ class BrowserSessionRequest(BaseModel):
     default=None,
     description=("The session ID to open in the browser. If None, a new session will be created with a random name."),
   )
+  live_view: bool | None = Field(default=True, description="Request a live URL to interact with the browser session.")
 
 
 class BrowserSessionResponse(BaseModel):
   """Browser session response model."""
 
-  live_url: str = Field(description="The live URL to interact with the browser session.")
   session_id: str = Field(description="The ID of the browser session associated with the opened browser instance.")
+  live_url: str | None = Field(default=None, description="The live URL to interact with the browser session.")
 
 
 class BrowserSessionsResponse(BaseModel):
@@ -176,7 +177,9 @@ class BrowserSessionHandle(BaseModel):
 
   def live_url(self, interactive: bool = True, embed: bool = False):
     """Returns the live URL for the browser session."""
-    return _encode_url(self.browser_session.live_url, interactive=interactive, embed=embed)
+    if self.browser_session.live_url:
+      return _encode_url(self.browser_session.live_url, interactive=interactive, embed=embed)
+    return None
 
 
 class TaskHandle:
@@ -286,6 +289,7 @@ class SmoothClient(BaseClient):
   def run(
     self,
     task: str,
+    response_model: dict[str, Any] | BaseModel | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -303,6 +307,7 @@ class SmoothClient(BaseClient):
 
     Args:
         task: The task to run.
+        response_model: If provided, the schema describing the desired output structure.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -321,6 +326,7 @@ class SmoothClient(BaseClient):
     """
     payload = TaskRequest(
       task=task,
+      response_model=response_model.model_json_schema() if isinstance(response_model, BaseModel) else response_model,
       agent=agent,
       max_steps=max_steps,
       device=device,
@@ -335,11 +341,12 @@ class SmoothClient(BaseClient):
 
     return TaskHandle(initial_response.id, self)
 
-  def open_session(self, session_id: str | None = None) -> BrowserSessionHandle:
+  def open_session(self, session_id: str | None = None, live_view: bool = True) -> BrowserSessionHandle:
     """Gets an interactive browser instance.
 
     Args:
         session_id: The session ID to associate with the browser. If None, a new session will be created.
+        live_view: Whether to enable live view for the session.
 
     Returns:
         The browser session details, including the live URL.
@@ -350,7 +357,7 @@ class SmoothClient(BaseClient):
     try:
       response = self._session.post(
         f"{self.base_url}/browser/session",
-        json=BrowserSessionRequest(session_id=session_id).model_dump(exclude_none=True),
+        json=BrowserSessionRequest(session_id=session_id, live_view=live_view).model_dump(exclude_none=True),
       )
       data = self._handle_response(response)
       return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
@@ -447,6 +454,7 @@ class AsyncTaskHandle:
 
     raise TimeoutError(f"Recording URL not available for task {self.id}.")
 
+
 class SmoothAsyncClient(BaseClient):
   """An asynchronous client for the API."""
 
@@ -489,6 +497,7 @@ class SmoothAsyncClient(BaseClient):
   async def run(
     self,
     task: str,
+    response_model: dict[str, Any] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -506,6 +515,7 @@ class SmoothAsyncClient(BaseClient):
 
     Args:
         task: The task to run.
+        response_model: If provided, the schema describing the desired output structure.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -526,6 +536,7 @@ class SmoothAsyncClient(BaseClient):
     """
     payload = TaskRequest(
       task=task,
+      response_model=response_model.model_json_schema() if isinstance(response_model, BaseModel) else response_model,
       agent=agent,
       max_steps=max_steps,
       device=device,
@@ -540,11 +551,12 @@ class SmoothAsyncClient(BaseClient):
     initial_response = await self._submit_task(payload)
     return AsyncTaskHandle(initial_response.id, self)
 
-  async def open_session(self, session_id: str | None = None) -> BrowserSessionHandle:
+  async def open_session(self, session_id: str | None = None, live_view: bool = True) -> BrowserSessionHandle:
     """Opens an interactive browser instance asynchronously.
 
     Args:
         session_id: The session ID to associate with the browser.
+        live_view: Whether to enable live view for the session.
 
     Returns:
         The browser session details, including the live URL.
@@ -555,7 +567,7 @@ class SmoothAsyncClient(BaseClient):
     try:
       response = await self._client.post(
         f"{self.base_url}/browser/session",
-        json=BrowserSessionRequest(session_id=session_id).model_dump(exclude_none=True),
+        json=BrowserSessionRequest(session_id=session_id, live_view=live_view).model_dump(exclude_none=True),
       )
       data = self._handle_response(response)
       return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
@@ -592,3 +604,20 @@ class SmoothAsyncClient(BaseClient):
   async def close(self):
     """Closes the async client session."""
     await self._client.aclose()
+
+
+# Export public API
+__all__ = [
+  "SmoothClient",
+  "SmoothAsyncClient",
+  "TaskHandle",
+  "AsyncTaskHandle",
+  "BrowserSessionHandle",
+  "TaskRequest",
+  "TaskResponse",
+  "BrowserSessionRequest",
+  "BrowserSessionResponse",
+  "BrowserSessionsResponse",
+  "ApiError",
+  "TimeoutError",
+]
