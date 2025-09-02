@@ -5,10 +5,7 @@ import logging
 import os
 import time
 import urllib.parse
-from typing import (
-  Any,
-  Literal,
-)
+from typing import Any, Literal, Type
 
 import httpx
 import requests
@@ -289,7 +286,7 @@ class SmoothClient(BaseClient):
   def run(
     self,
     task: str,
-    response_model: dict[str, Any] | BaseModel | None = None,
+    response_model: dict[str, Any] | Type[BaseModel] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -326,7 +323,7 @@ class SmoothClient(BaseClient):
     """
     payload = TaskRequest(
       task=task,
-      response_model=response_model.model_json_schema() if isinstance(response_model, BaseModel) else response_model,
+      response_model=response_model.model_json_schema() if issubclass(response_model, BaseModel) else response_model,
       agent=agent,
       max_steps=max_steps,
       device=device,
@@ -497,7 +494,7 @@ class SmoothAsyncClient(BaseClient):
   async def run(
     self,
     task: str,
-    response_model: dict[str, Any] | None = None,
+    response_model: dict[str, Any] | Type[BaseModel] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -536,7 +533,7 @@ class SmoothAsyncClient(BaseClient):
     """
     payload = TaskRequest(
       task=task,
-      response_model=response_model.model_json_schema() if isinstance(response_model, BaseModel) else response_model,
+      response_model=response_model.model_json_schema() if issubclass(response_model, BaseModel) else response_model,
       agent=agent,
       max_steps=max_steps,
       device=device,
