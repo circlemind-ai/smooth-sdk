@@ -1,6 +1,6 @@
 [project]
 name = "smooth-py"
-version = "0.2.0.post0"
+version = "0.2.1"
 description = ""
 authors = [
     {name = "Luca Pinchetti",email = "luca@circlemind.co"}

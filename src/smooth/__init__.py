@@ -51,6 +51,11 @@ class TaskRequest(BaseModel):
   response_model: dict[str, Any] | None = Field(
     default=None, description="If provided, the JSON schema describing the desired output structure. Default is None"
   )
+  url: str | None = Field(
+    default=None,
+    description="(Optional) The starting URL for the task. If not provided, the agent will infer it from the task.",
+  )
+  metadata: dict[str, str | int | float | bool] | None = Field(default=None, description="Optional metadata for the task.")
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
@@ -291,6 +296,8 @@ class SmoothClient(BaseClient):
     self,
     task: str,
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
+    url: str | None = None,
+    metadata: dict[str, str | int | float | bool] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -309,6 +316,8 @@ class SmoothClient(BaseClient):
     Args:
         task: The task to run.
         response_model: If provided, the schema describing the desired output structure.
+        url: The starting URL for the task. If not provided, the agent will infer it from the task.
+        metadata: Optional metadata for the task.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -328,6 +337,8 @@ class SmoothClient(BaseClient):
     payload = TaskRequest(
       task=task,
       response_model=response_model.model_json_schema() if issubclass(response_model, BaseModel) else response_model,
+      url=url,
+      metadata=metadata,
       agent=agent,
       max_steps=max_steps,
       device=device,
@@ -499,6 +510,8 @@ class SmoothAsyncClient(BaseClient):
     self,
     task: str,
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
+    url: str | None = None,
+    metadata: dict[str, str | int | float | bool] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -517,6 +530,8 @@ class SmoothAsyncClient(BaseClient):
     Args:
         task: The task to run.
         response_model: If provided, the schema describing the desired output structure.
+        url: The starting URL for the task. If not provided, the agent will infer it from the task.
+        metadata: Optional metadata for the task.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -538,6 +553,8 @@ class SmoothAsyncClient(BaseClient):
     payload = TaskRequest(
       task=task,
       response_model=response_model.model_json_schema() if issubclass(response_model, BaseModel) else response_model,
+      url=url,
+      metadata=metadata,
       agent=agent,
       max_steps=max_steps,
       device=device,
