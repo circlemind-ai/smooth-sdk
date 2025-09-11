@@ -210,12 +210,12 @@ class TaskHandle:
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      task_response = self._client._get_task(self.id())
       self._task_response = task_response
       if task_response.status not in ["running", "waiting"]:
         return task_response
       time.sleep(poll_interval)
-    raise TimeoutError(f"Task {self.id} did not complete within {timeout} seconds.")
+    raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
 
   def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
@@ -224,13 +224,13 @@ class TaskHandle:
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      task_response = self._client._get_task(self.id())
       self._task_response = task_response
       if self._task_response.live_url:
         return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
       time.sleep(1)
 
-    raise TimeoutError(f"Live URL not available for task {self.id}.")
+    raise TimeoutError(f"Live URL not available for task {self.id()}.")
 
   def recording_url(self, timeout: int | None = None) -> str:
     """Returns the recording URL for the task."""
@@ -239,12 +239,12 @@ class TaskHandle:
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      task_response = self._client._get_task(self.id())
       self._task_response = task_response
       if task_response.recording_url is not None:
         return task_response.recording_url
       time.sleep(1)
-    raise TimeoutError(f"Recording URL not available for task {self.id}.")
+    raise TimeoutError(f"Recording URL not available for task {self.id()}.")
 
 
 class SmoothClient(BaseClient):
@@ -415,7 +415,11 @@ class AsyncTaskHandle:
     self._client = client
     self._task_response: TaskResponse | None = None
 
-    self.id = task_id
+    self._id = task_id
+
+  def id(self):
+    """Returns the task ID."""
+    return self._id
 
   async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
@@ -429,12 +433,12 @@ class AsyncTaskHandle:
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
-      task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      task_response = await self._client._get_task(self.id())
       self._task_response = task_response
       if task_response.status not in ["running", "waiting"]:
         return task_response
       await asyncio.sleep(poll_interval)
-    raise TimeoutError(f"Task {self.id} did not complete within {timeout} seconds.")
+    raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
 
   async def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
@@ -443,13 +447,13 @@ class AsyncTaskHandle:
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
-      task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      task_response = await self._client._get_task(self.id())
       self._task_response = task_response
       if task_response.live_url is not None:
         return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
       await asyncio.sleep(1)
 
-    raise TimeoutError(f"Live URL not available for task {self.id}.")
+    raise TimeoutError(f"Live URL not available for task {self.id()}.")
 
   async def recording_url(self, timeout: int | None = None):
     """Returns the recording URL for the task."""
@@ -458,13 +462,13 @@ class AsyncTaskHandle:
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
-      task_response = await self._client._get_task(self.id)  # pyright: ignore [reportPrivateUsage]
+      task_response = await self._client._get_task(self.id())
       self._task_response = task_response
       if task_response.recording_url is not None:
         return task_response.recording_url
       await asyncio.sleep(1)
 
-    raise TimeoutError(f"Recording URL not available for task {self.id}.")
+    raise TimeoutError(f"Recording URL not available for task {self.id()}.")
 
 
 class SmoothAsyncClient(BaseClient):
