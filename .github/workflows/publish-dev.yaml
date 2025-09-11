@@ -1,0 +1,48 @@
+name: Publish Dev Package to PyPI (manual)
+
+on:
+  workflow_dispatch:  # Only runs when manually triggered from the Actions tab
+
+jobs:
+  build-n-publish-dev:
+    name: Build and publish Python 🐍 dev distributions to PyPI
+    runs-on: ubuntu-latest
+    
+    environment:
+      name: pypi
+      url: https://pypi.org/p/smooth-py
+
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Poetry
+        run: pipx install poetry==2.1.*
+
+      - name: Cache Poetry virtual environment
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Set dev version
+        run: |
+          DATE=$(date +%Y%m%d)
+          poetry version "$(poetry version -s).dev${DATE}"
+          echo "Version set to $(poetry version -s)"
+
+      - name: Build package
+        run: poetry build
+
+      - name: Publish package to PyPI (dev)
+        uses: pypa/gh-action-pypi-publish@release/v1
