@@ -53,9 +53,14 @@ class TaskRequest(BaseModel):
   )
   url: str | None = Field(
     default=None,
-    description="(Optional) The starting URL for the task. If not provided, the agent will infer it from the task.",
+    description="The starting URL for the task. If not provided, the agent will infer it from the task.",
   )
-  metadata: dict[str, str | int | float | bool] | None = Field(default=None, description="Optional metadata for the task.")
+  metadata: dict[str, str | int | float | bool] | None = Field(
+    default=None, description="A dictionary containing variables or parameters that will be passed to the agent."
+  )
+  files: dict[str, str] | None = Field(
+    default=None, description="A dictionary of file names to their url or base64-encoded content to be used by the agent"
+  ),
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
@@ -298,6 +303,7 @@ class SmoothClient(BaseClient):
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, str | int | float | bool] | None = None,
+    files: dict[str, str] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -317,7 +323,8 @@ class SmoothClient(BaseClient):
         task: The task to run.
         response_model: If provided, the schema describing the desired output structure.
         url: The starting URL for the task. If not provided, the agent will infer it from the task.
-        metadata: Optional metadata for the task.
+        metadata: A dictionary containing variables or parameters that will be passed to the agent.
+        files: A dictionary of file names to their url or base64-encoded content to be used by the agent.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -339,6 +346,7 @@ class SmoothClient(BaseClient):
       response_model=response_model.model_json_schema() if issubclass(response_model, BaseModel) else response_model,
       url=url,
       metadata=metadata,
+      files=files,
       agent=agent,
       max_steps=max_steps,
       device=device,
@@ -516,6 +524,7 @@ class SmoothAsyncClient(BaseClient):
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, str | int | float | bool] | None = None,
+    files: dict[str, str] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -535,7 +544,8 @@ class SmoothAsyncClient(BaseClient):
         task: The task to run.
         response_model: If provided, the schema describing the desired output structure.
         url: The starting URL for the task. If not provided, the agent will infer it from the task.
-        metadata: Optional metadata for the task.
+        metadata: A dictionary containing variables or parameters that will be passed to the agent.
+        files: A dictionary of file names to their url or base64-encoded content to be used by the agent.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -559,6 +569,7 @@ class SmoothAsyncClient(BaseClient):
       response_model=response_model.model_json_schema() if issubclass(response_model, BaseModel) else response_model,
       url=url,
       metadata=metadata,
+      files=files,
       agent=agent,
       max_steps=max_steps,
       device=device,
