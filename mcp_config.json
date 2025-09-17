@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "smooth": {
+      "command": "python",
+      "args": ["-c", "from smooth.mcp import SmoothMCP; SmoothMCP(api_key=os.getenv('CIRCLEMIND_API_KEY'), server_name='Smooth Browser Automation Server').run()"],
+      "env": {
+        "CIRCLEMIND_API_KEY": "your-smooth-api-key-here"
+      }
+    }
+  }
+}
