@@ -1,15 +1,16 @@
 [project]
 name = "smooth-py"
-version = "0.2.1.post0"
+version = "0.2.2.post0"
 description = ""
 authors = [
     {name = "Luca Pinchetti",email = "luca@circlemind.co"}
 ]
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<4.0"
 dependencies = [
     "pydantic (>=2.11.7,<3.0.0)",
-    "httpx (>=0.28.1,<0.29.0)"
+    "httpx (>=0.28.1,<0.29.0)",
+    "requests (>=2.32.5,<3.0.0)"
 ]
 
 [project.optional-dependencies]
