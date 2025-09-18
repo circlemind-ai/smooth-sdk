@@ -1,6 +1,7 @@
 """Smooth python SDK."""
 
 import asyncio
+import io
 import logging
 import os
 import time
@@ -58,9 +59,9 @@ class TaskRequest(BaseModel):
   metadata: dict[str, str | int | float | bool] | None = Field(
     default=None, description="A dictionary containing variables or parameters that will be passed to the agent."
   )
-  files: dict[str, str] | None = Field(
-    default=None, description="A dictionary of file names to their url or base64-encoded content to be used by the agent"
-  ),
+  files: list[str] | None = Field(
+    default=None, description="A dictionary of file ids to pass to the agent."
+  )
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
@@ -101,6 +102,11 @@ class BrowserSessionsResponse(BaseModel):
   """Response model for listing browser sessions."""
 
   session_ids: list[str] = Field(description="The IDs of the browser sessions.")
+
+
+class UploadFileResponse(BaseModel):
+  """Response model for listing browser sessions."""
+  id: str = Field(description="The ID assigned to the uploaded file.")
 
 
 # --- Exception Handling ---
@@ -145,7 +151,6 @@ class BaseClient:
     self.base_url = f"{base_url.rstrip('/')}/{api_version}"
     self.headers = {
       "apikey": self.api_key,
-      "Content-Type": "application/json",
       "User-Agent": "smooth-python-sdk/0.2.0",
     }
 
@@ -284,6 +289,19 @@ class SmoothClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  def _upload_file(self, file: io.IOBase, name: str) -> UploadFileResponse:
+    """Uploads a file and returns the assigned file id."""
+    try:
+      files = {
+        "file": (name, file)
+      }
+      response = self._session.post(f"{self.base_url}/upload_file", files=files)
+      data = self._handle_response(response)
+      return UploadFileResponse(**data["r"])
+    except requests.exceptions.RequestException as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
   def _get_task(self, task_id: str) -> TaskResponse:
     """Retrieves the status and result of a task."""
     if not task_id:
@@ -303,7 +321,7 @@ class SmoothClient(BaseClient):
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, str | int | float | bool] | None = None,
-    files: dict[str, str] | None = None,
+    files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -324,7 +342,7 @@ class SmoothClient(BaseClient):
         response_model: If provided, the schema describing the desired output structure.
         url: The starting URL for the task. If not provided, the agent will infer it from the task.
         metadata: A dictionary containing variables or parameters that will be passed to the agent.
-        files: A dictionary of file names to their url or base64-encoded content to be used by the agent.
+        files: A dictionary of file names to their ids. These files will be passed to the agent.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -407,9 +425,24 @@ class SmoothClient(BaseClient):
     try:
       response = self._session.delete(f"{self.base_url}/browser/session/{session_id}")
       self._handle_response(response)
-    except httpx.RequestError as e:
+    except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  def upload_file(self, file: io.IOBase, name: str) -> UploadFileResponse:
+    """Upload a file and return the file ID.
+
+    Args:
+        file_path: Path to the file to upload.
+
+    Returns:
+        The file ID assigned to the uploaded file.
+
+    Raises:
+        ValueError: If the file doesn't exist or can't be read.
+        ApiError: If the API request fails.
+    """
+    return self._upload_file(file=file, name=name)
 
 
 # --- Asynchronous Client ---
@@ -505,6 +538,19 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  async def _upload_file(self, file: io.IOBase, name: str) -> UploadFileResponse:
+    """Uploads a file and returns the assigned file id."""
+    try:
+      files = {
+        "file": (name, file)
+      }
+      response = await self._client.post(f"{self.base_url}/upload_file", files=files)
+      data = self._handle_response(response)
+      return UploadFileResponse(**data["r"])
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
   async def _get_task(self, task_id: str) -> TaskResponse:
     """Retrieves the status and result of a task asynchronously."""
     if not task_id:
@@ -524,7 +570,7 @@ class SmoothAsyncClient(BaseClient):
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, str | int | float | bool] | None = None,
-    files: dict[str, str] | None = None,
+    files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
@@ -634,6 +680,21 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  async def upload_file(self, file: io.IOBase, name: str) -> UploadFileResponse:
+    """Upload a file and return the file ID.
+
+    Args:
+        file_path: Path to the file to upload.
+
+    Returns:
+        The file ID assigned to the uploaded file.
+
+    Raises:
+        ValueError: If the file doesn't exist or can't be read.
+        ApiError: If the API request fails.
+    """
+    return await self._upload_file(file=file, name=name)
+
   async def close(self):
     """Closes the async client session."""
     await self._client.aclose()
@@ -651,6 +712,7 @@ __all__ = [
   "BrowserSessionRequest",
   "BrowserSessionResponse",
   "BrowserSessionsResponse",
+  "UploadFileResponse",
   "ApiError",
   "TimeoutError",
 ]
