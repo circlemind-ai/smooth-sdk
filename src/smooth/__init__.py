@@ -433,7 +433,8 @@ class SmoothClient(BaseClient):
     """Upload a file and return the file ID.
 
     Args:
-        file_path: Path to the file to upload.
+        file: File object to be uploaded.
+        name: The name to assign to the uploaded file.
 
     Returns:
         The file ID assigned to the uploaded file.
@@ -684,7 +685,8 @@ class SmoothAsyncClient(BaseClient):
     """Upload a file and return the file ID.
 
     Args:
-        file_path: Path to the file to upload.
+        file: File object to be uploaded.
+        name: The name to assign to the uploaded file.
 
     Returns:
         The file ID assigned to the uploaded file.
