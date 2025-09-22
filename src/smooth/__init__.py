@@ -152,7 +152,7 @@ class BaseClient:
     self.base_url = f"{base_url.rstrip('/')}/{api_version}"
     self.headers = {
       "apikey": self.api_key,
-      "User-Agent": "smooth-python-sdk/0.2.4",
+      "User-Agent": "smooth-python-sdk/0.2.5",
     }
 
   def _handle_response(self, response: requests.Response | httpx.Response) -> dict[str, Any]:
