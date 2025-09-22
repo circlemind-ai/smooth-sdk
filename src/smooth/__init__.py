@@ -151,7 +151,7 @@ class BaseClient:
     self.base_url = f"{base_url.rstrip('/')}/{api_version}"
     self.headers = {
       "apikey": self.api_key,
-      "User-Agent": "smooth-python-sdk/0.2.0",
+      "User-Agent": "smooth-python-sdk/0.2.4",
     }
 
   def _handle_response(self, response: requests.Response | httpx.Response) -> dict[str, Any]:
@@ -285,19 +285,6 @@ class SmoothClient(BaseClient):
       response = self._session.post(f"{self.base_url}/task", json=payload.model_dump(exclude_none=True))
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
-    except requests.exceptions.RequestException as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  def _upload_file(self, file: io.IOBase, name: str) -> UploadFileResponse:
-    """Uploads a file and returns the assigned file id."""
-    try:
-      files = {
-        "file": (name, file)
-      }
-      response = self._session.post(f"{self.base_url}/upload_file", files=files)
-      data = self._handle_response(response)
-      return UploadFileResponse(**data["r"])
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
@@ -443,7 +430,25 @@ class SmoothClient(BaseClient):
         ValueError: If the file doesn't exist or can't be read.
         ApiError: If the API request fails.
     """
-    return self._upload_file(file=file, name=name)
+    try:
+      files = {
+        "file": (name, file)
+      }
+      response = self._session.post(f"{self.base_url}/file", files=files)
+      data = self._handle_response(response)
+      return UploadFileResponse(**data["r"])
+    except requests.exceptions.RequestException as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  def delete_file(self, file_id: str):
+    """Delete a file by its ID."""
+    try:
+      response = self._session.delete(f"{self.base_url}/file/{file_id}")
+      self._handle_response(response)
+    except requests.exceptions.RequestException as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
 
 # --- Asynchronous Client ---
@@ -535,19 +540,6 @@ class SmoothAsyncClient(BaseClient):
       response = await self._client.post(f"{self.base_url}/task", json=payload.model_dump(exclude_none=True))
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
-    except httpx.RequestError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def _upload_file(self, file: io.IOBase, name: str) -> UploadFileResponse:
-    """Uploads a file and returns the assigned file id."""
-    try:
-      files = {
-        "file": (name, file)
-      }
-      response = await self._client.post(f"{self.base_url}/upload_file", files=files)
-      data = self._handle_response(response)
-      return UploadFileResponse(**data["r"])
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
@@ -695,7 +687,25 @@ class SmoothAsyncClient(BaseClient):
         ValueError: If the file doesn't exist or can't be read.
         ApiError: If the API request fails.
     """
-    return await self._upload_file(file=file, name=name)
+    try:
+      files = {
+        "file": (name, file)
+      }
+      response = await self._client.post(f"{self.base_url}/file", files=files)
+      data = self._handle_response(response)
+      return UploadFileResponse(**data["r"])
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def delete_file(self, file_id: str):
+    """Delete a file by its ID."""
+    try:
+      response = await self._client.delete(f"{self.base_url}/file/{file_id}")
+      self._handle_response(response)
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
   async def close(self):
     """Closes the async client session."""
