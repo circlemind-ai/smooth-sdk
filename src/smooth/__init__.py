@@ -6,6 +6,7 @@ import logging
 import os
 import time
 import urllib.parse
+from pathlib import Path
 from typing import Any, Literal, Type
 
 import httpx
@@ -60,7 +61,7 @@ class TaskRequest(BaseModel):
     default=None, description="A dictionary containing variables or parameters that will be passed to the agent."
   )
   files: list[str] | None = Field(
-    default=None, description="A dictionary of file ids to pass to the agent."
+    default=None, description="A list of file ids to pass to the agent."
   )
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
@@ -416,12 +417,13 @@ class SmoothClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  def upload_file(self, file: io.IOBase, name: str) -> UploadFileResponse:
+  def upload_file(self, file: io.IOBase, name: str | None = None, purpose: str | None = None) -> UploadFileResponse:
     """Upload a file and return the file ID.
 
     Args:
         file: File object to be uploaded.
-        name: The name to assign to the uploaded file.
+        name: A custom name to assign to the uploaded file.
+        purpose: An optional short description of the file to describe its purpose.
 
     Returns:
         The file ID assigned to the uploaded file.
@@ -431,10 +433,21 @@ class SmoothClient(BaseClient):
         ApiError: If the API request fails.
     """
     try:
+      name = name or getattr(file, "name", None)
+      if name is None:
+        raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
+
+      if purpose:
+        data = {
+          "file_purpose": purpose
+        }
+      else:
+        data = None
+
       files = {
-        "file": (name, file)
+        "file": (Path(name).name, file)
       }
-      response = self._session.post(f"{self.base_url}/file", files=files)
+      response = self._session.post(f"{self.base_url}/file", files=files, data=data)
       data = self._handle_response(response)
       return UploadFileResponse(**data["r"])
     except requests.exceptions.RequestException as e:
@@ -673,12 +686,13 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  async def upload_file(self, file: io.IOBase, name: str) -> UploadFileResponse:
+  async def upload_file(self, file: io.IOBase, name: str | None = None, purpose: str | None = None) -> UploadFileResponse:
     """Upload a file and return the file ID.
 
     Args:
         file: File object to be uploaded.
-        name: The name to assign to the uploaded file.
+        name: A custom name to assign to the uploaded file.
+        purpose: An optional short description of the file to describe its purpose.
 
     Returns:
         The file ID assigned to the uploaded file.
@@ -688,10 +702,20 @@ class SmoothAsyncClient(BaseClient):
         ApiError: If the API request fails.
     """
     try:
+      name = name or getattr(file, "name", None)
+      if name is None:
+        raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
+
       files = {
-        "file": (name, file)
+        "file": (Path(name).name, file)
       }
-      response = await self._client.post(f"{self.base_url}/file", files=files)
+      if purpose:
+        data = {
+          "file_purpose": purpose
+        }
+      else:
+        data = None
+      response = await self._client.post(f"{self.base_url}/file", files=files, data=data)
       data = self._handle_response(response)
       return UploadFileResponse(**data["r"])
     except httpx.RequestError as e:
