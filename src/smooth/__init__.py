@@ -422,8 +422,8 @@ class SmoothClient(BaseClient):
 
     Args:
         file: File object to be uploaded.
-        name: An optional name to assign to the uploaded file.
-        purpose: An optional short description of the file to describe its purpose.
+        name: Optional custom name for the file. If not provided, the original file name will be used.
+        purpose: Optional short description of the file to describe its purpose.
 
     Returns:
         The file ID assigned to the uploaded file.
@@ -691,8 +691,8 @@ class SmoothAsyncClient(BaseClient):
 
     Args:
         file: File object to be uploaded.
-        name: An optional name to assign to the uploaded file.
-        purpose: An optional short description of the file to describe its purpose.
+        name: Optional custom name for the file. If not provided, the original file name will be used.
+        purpose: Optional short description of the file to describe its purpose.
 
     Returns:
         The file ID assigned to the uploaded file.
