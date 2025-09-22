@@ -60,12 +60,16 @@ class TaskRequest(BaseModel):
   metadata: dict[str, str | int | float | bool] | None = Field(
     default=None, description="A dictionary containing variables or parameters that will be passed to the agent."
   )
-  files: list[str] | None = Field(
-    default=None, description="A list of file ids to pass to the agent."
-  )
+  files: list[str] | None = Field(default=None, description="A list of file ids to pass to the agent.")
   agent: Literal["smooth"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
   device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
+  allowed_urls: list[str] | None = Field(
+    default=None,
+    description=(
+      "List of allowed URL patterns using wildcard syntax (e.g., https://example.com/*). If None, all URLs are allowed."
+    ),
+  )
   enable_recording: bool = Field(default=True, description="Enable video recording of the task execution. Default is True")
   session_id: str | None = Field(
     default=None,
@@ -107,6 +111,7 @@ class BrowserSessionsResponse(BaseModel):
 
 class UploadFileResponse(BaseModel):
   """Response model for uploading a file."""
+
   id: str = Field(description="The ID assigned to the uploaded file.")
 
 
@@ -313,6 +318,7 @@ class SmoothClient(BaseClient):
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
+    allowed_urls: list[str] | None = None,
     enable_recording: bool = False,
     session_id: str | None = None,
     stealth_mode: bool = False,
@@ -334,6 +340,8 @@ class SmoothClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
+        allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://example.com/*).
+          If None, all URLs are allowed.
         enable_recording: Enable video recording of the task execution.
         session_id: Browser session ID to use.
         stealth_mode: Run the browser in stealth mode.
@@ -356,6 +364,7 @@ class SmoothClient(BaseClient):
       agent=agent,
       max_steps=max_steps,
       device=device,
+      allowed_urls=allowed_urls,
       enable_recording=enable_recording,
       session_id=session_id,
       stealth_mode=stealth_mode,
@@ -438,15 +447,11 @@ class SmoothClient(BaseClient):
         raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
 
       if purpose:
-        data = {
-          "file_purpose": purpose
-        }
+        data = {"file_purpose": purpose}
       else:
         data = None
 
-      files = {
-        "file": (Path(name).name, file)
-      }
+      files = {"file": (Path(name).name, file)}
       response = self._session.post(f"{self.base_url}/file", files=files, data=data)
       data = self._handle_response(response)
       return UploadFileResponse(**data["r"])
@@ -580,6 +585,7 @@ class SmoothAsyncClient(BaseClient):
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
+    allowed_urls: list[str] | None = None,
     enable_recording: bool = False,
     session_id: str | None = None,
     stealth_mode: bool = False,
@@ -601,6 +607,8 @@ class SmoothAsyncClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
+        allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://example.com/*).
+          If None, all URLs are allowed.
         enable_recording: Enable video recording of the task execution.
         session_id: Browser session ID to use.
         stealth_mode: Run the browser in stealth mode.
@@ -625,6 +633,7 @@ class SmoothAsyncClient(BaseClient):
       agent=agent,
       max_steps=max_steps,
       device=device,
+      allowed_urls=allowed_urls,
       enable_recording=enable_recording,
       session_id=session_id,
       stealth_mode=stealth_mode,
@@ -706,13 +715,9 @@ class SmoothAsyncClient(BaseClient):
       if name is None:
         raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
 
-      files = {
-        "file": (Path(name).name, file)
-      }
+      files = {"file": (Path(name).name, file)}
       if purpose:
-        data = {
-          "file_purpose": purpose
-        }
+        data = {"file_purpose": purpose}
       else:
         data = None
       response = await self._client.post(f"{self.base_url}/file", files=files, data=data)
