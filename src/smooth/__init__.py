@@ -105,7 +105,7 @@ class BrowserSessionsResponse(BaseModel):
 
 
 class UploadFileResponse(BaseModel):
-  """Response model for listing browser sessions."""
+  """Response model for uploading a file."""
   id: str = Field(description="The ID assigned to the uploaded file.")
 
 
