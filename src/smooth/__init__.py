@@ -67,7 +67,7 @@ class TaskRequest(BaseModel):
   allowed_urls: list[str] | None = Field(
     default=None,
     description=(
-      "List of allowed URL patterns using wildcard syntax (e.g., https://example.com/*). If None, all URLs are allowed."
+      "List of allowed URL patterns using wildcard syntax (e.g., https://*example.com/*). If None, all URLs are allowed."
     ),
   )
   enable_recording: bool = Field(default=True, description="Enable video recording of the task execution. Default is True")
@@ -340,7 +340,7 @@ class SmoothClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
-        allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://example.com/*).
+        allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://*example.com/*).
           If None, all URLs are allowed.
         enable_recording: Enable video recording of the task execution.
         session_id: Browser session ID to use.
@@ -607,7 +607,7 @@ class SmoothAsyncClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
-        allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://example.com/*).
+        allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://*example.com/*).
           If None, all URLs are allowed.
         enable_recording: Enable video recording of the task execution.
         session_id: Browser session ID to use.
