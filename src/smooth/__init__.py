@@ -8,6 +8,7 @@ import time
 import urllib.parse
 from pathlib import Path
 from typing import Any, Literal, Type
+from warnings import deprecated
 
 import httpx
 import requests
@@ -71,9 +72,12 @@ class TaskRequest(BaseModel):
     ),
   )
   enable_recording: bool = Field(default=True, description="Enable video recording of the task execution. Default is True")
-  session_id: str | None = Field(
+  profile_id: str | None = Field(
     default=None,
-    description="Browser session ID to use. Each session maintains its own state, such as login credentials.",
+    description=("Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials."),
+  )
+  profile_read_only: bool | None = Field(
+    default=None, description="If true, the profile specified by `profile_id` will be loaded in read-only mode."
   )
   stealth_mode: bool = Field(default=False, description="Run the browser in stealth mode.")
   proxy_server: str | None = Field(
@@ -85,28 +89,75 @@ class TaskRequest(BaseModel):
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: str | None = Field(default=None, description="Proxy server password.")
 
+  @property
+  @deprecated("session_id is deprecated, use profile_id instead")
+  def session_id(self):
+    """(Deprecated) Returns the session ID."""
+    return self.profile_id
+  @session_id.setter
+  @deprecated("session_id is deprecated, use profile_id instead")
+  def session_id(self, value):
+    """(Deprecated) Sets the session ID."""
+    self.profile_id = value
 
 class BrowserSessionRequest(BaseModel):
   """Request model for creating a browser session."""
 
-  session_id: str | None = Field(
-    default=None,
-    description=("The session ID to open in the browser. If None, a new session will be created with a random name."),
+  profile_id: str | None = Field(
+    default=None, description=("The profile ID to use for the browser session. If None, a new profile will be created.")
   )
   live_view: bool | None = Field(default=True, description="Request a live URL to interact with the browser session.")
+
+  @property
+  @deprecated("session_id is deprecated, use profile_id instead")
+  def session_id(self):
+    """(Deprecated) Returns the session ID."""
+    return self.profile_id
+  @session_id.setter
+  @deprecated("session_id is deprecated, use profile_id instead")
+  def session_id(self, value):
+    """(Deprecated) Sets the session ID."""
+    self.profile_id = value
 
 
 class BrowserSessionResponse(BaseModel):
   """Browser session response model."""
 
-  session_id: str = Field(description="The ID of the browser session associated with the opened browser instance.")
+  profile_id: str = Field(description="The ID of the browser profile associated with the opened browser instance.")
   live_url: str | None = Field(default=None, description="The live URL to interact with the browser session.")
 
+  @property
+  @deprecated("session_id is deprecated, use profile_id instead")
+  def session_id(self):
+    """(Deprecated) Returns the session ID."""
+    return self.profile_id
 
-class BrowserSessionsResponse(BaseModel):
-  """Response model for listing browser sessions."""
+  @session_id.setter
+  @deprecated("session_id is deprecated, use profile_id instead")
+  def session_id(self, value):
+    """(Deprecated) Sets the session ID."""
+    self.profile_id = value
 
-  session_ids: list[str] = Field(description="The IDs of the browser sessions.")
+
+class BrowserProfilesResponse(BaseModel):
+  """Response model for listing browser profiles."""
+
+  profile_ids: list[str] = Field(description="The IDs of the browser profiles.")
+
+  @property
+  @deprecated("session_ids is deprecated, use profile_ids instead")
+  def session_ids(self):
+    """(Deprecated) Returns the session IDs."""
+    return self.profile_ids
+  @session_ids.setter
+  @deprecated("session_ids is deprecated, use profile_ids instead")
+  def session_ids(self, value):
+    """(Deprecated) Sets the session IDs."""
+    self.profile_ids = value
+
+class BrowserSessionsResponse(BrowserProfilesResponse):
+  """Response model for listing browser profiles."""
+  pass
 
 
 class UploadFileResponse(BaseModel):
@@ -189,9 +240,14 @@ class BrowserSessionHandle(BaseModel):
 
   browser_session: BrowserSessionResponse = Field(description="The browser session associated with this handle.")
 
+  @deprecated("session_id is deprecated, use profile_id instead")
   def session_id(self):
     """Returns the session ID for the browser session."""
-    return self.browser_session.session_id
+    return self.profile_id()
+
+  def profile_id(self):
+    """Returns the profile ID for the browser session."""
+    return self.browser_session.profile_id
 
   def live_url(self, interactive: bool = True, embed: bool = False):
     """Returns the live URL for the browser session."""
@@ -321,6 +377,8 @@ class SmoothClient(BaseClient):
     allowed_urls: list[str] | None = None,
     enable_recording: bool = False,
     session_id: str | None = None,
+    profile_id: str | None = None,
+    profile_read_only: bool | None = None,
     stealth_mode: bool = False,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
@@ -343,7 +401,9 @@ class SmoothClient(BaseClient):
         allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://*example.com/*).
           If None, all URLs are allowed.
         enable_recording: Enable video recording of the task execution.
-        session_id: Browser session ID to use.
+        session_id: (Deprecated, now `profile_id`) Browser session ID to use.
+        profile_id: Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials.
+        profile_read_only: If true, the profile specified by `profile_id` will be loaded in read-only mode.
         stealth_mode: Run the browser in stealth mode.
         proxy_server: Proxy server url to route browser traffic through.
         proxy_username: Proxy server username.
@@ -366,7 +426,8 @@ class SmoothClient(BaseClient):
       device=device,
       allowed_urls=allowed_urls,
       enable_recording=enable_recording,
-      session_id=session_id,
+      profile_id=profile_id or session_id,
+      profile_read_only=profile_read_only,
       stealth_mode=stealth_mode,
       proxy_server=proxy_server,
       proxy_username=proxy_username,
@@ -376,11 +437,14 @@ class SmoothClient(BaseClient):
 
     return TaskHandle(initial_response.id, self)
 
-  def open_session(self, session_id: str | None = None, live_view: bool = True) -> BrowserSessionHandle:
-    """Gets an interactive browser instance.
+  def open_session(
+    self, profile_id: str | None = None, session_id: str | None = None, live_view: bool = True
+  ) -> BrowserSessionHandle:
+    """Opens an interactive browser instance to interact with a specific browser profile.
 
     Args:
-        session_id: The session ID to associate with the browser. If None, a new session will be created.
+        profile_id: The profile ID to use for the session. If None, a new profile will be created.
+        session_id: (Deprecated, now `profile_id`) The session ID to associate with the browser.
         live_view: Whether to enable live view for the session.
 
     Returns:
@@ -392,7 +456,7 @@ class SmoothClient(BaseClient):
     try:
       response = self._session.post(
         f"{self.base_url}/browser/session",
-        json=BrowserSessionRequest(session_id=session_id, live_view=live_view).model_dump(exclude_none=True),
+        json=BrowserSessionRequest(profile_id=profile_id or session_id, live_view=live_view).model_dump(exclude_none=True),
       )
       data = self._handle_response(response)
       return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
@@ -400,11 +464,11 @@ class SmoothClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  def list_sessions(self) -> BrowserSessionsResponse:
-    """Lists all browser sessions for the user.
+  def list_profiles(self):
+    """Lists all browser profiles for the user.
 
     Returns:
-        A list of existing browser sessions.
+        A list of existing browser profiles.
 
     Raises:
         ApiException: If the API request fails.
@@ -412,19 +476,29 @@ class SmoothClient(BaseClient):
     try:
       response = self._session.get(f"{self.base_url}/browser/session")
       data = self._handle_response(response)
-      return BrowserSessionsResponse(**data["r"])
+      return BrowserProfilesResponse(**data["r"])
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  def delete_session(self, session_id: str):
-    """Delete a browser session."""
+  @deprecated("list_sessions is deprecated, use list_profiles instead")
+  def list_sessions(self):
+    """Lists all browser profiles for the user."""
+    return self.list_profiles()
+
+  def delete_profile(self, profile_id: str):
+    """Delete a browser profile."""
     try:
-      response = self._session.delete(f"{self.base_url}/browser/session/{session_id}")
+      response = self._session.delete(f"{self.base_url}/browser/session/{profile_id}")
       self._handle_response(response)
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  @deprecated("delete_session is deprecated, use delete_profile instead")
+  def delete_session(self, session_id: str):
+    """Delete a browser profile."""
+    self.delete_profile(session_id)
 
   def upload_file(self, file: io.IOBase, name: str | None = None, purpose: str | None = None) -> UploadFileResponse:
     """Upload a file and return the file ID.
@@ -588,6 +662,8 @@ class SmoothAsyncClient(BaseClient):
     allowed_urls: list[str] | None = None,
     enable_recording: bool = False,
     session_id: str | None = None,
+    profile_id: str | None = None,
+    profile_read_only: bool | None = None,
     stealth_mode: bool = False,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
@@ -610,7 +686,9 @@ class SmoothAsyncClient(BaseClient):
         allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://*example.com/*).
           If None, all URLs are allowed.
         enable_recording: Enable video recording of the task execution.
-        session_id: Browser session ID to use.
+        session_id: (Deprecated, now `profile_id`) Browser session ID to use.
+        profile_id: Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials.
+        profile_read_only: If true, the profile specified by `profile_id` will be loaded in read-only mode.
         stealth_mode: Run the browser in stealth mode.
         proxy_server: Proxy server url to route browser traffic through.
         proxy_username: Proxy server username.
@@ -635,7 +713,8 @@ class SmoothAsyncClient(BaseClient):
       device=device,
       allowed_urls=allowed_urls,
       enable_recording=enable_recording,
-      session_id=session_id,
+      profile_id=profile_id or session_id,
+      profile_read_only=profile_read_only,
       stealth_mode=stealth_mode,
       proxy_server=proxy_server,
       proxy_username=proxy_username,
@@ -645,11 +724,14 @@ class SmoothAsyncClient(BaseClient):
     initial_response = await self._submit_task(payload)
     return AsyncTaskHandle(initial_response.id, self)
 
-  async def open_session(self, session_id: str | None = None, live_view: bool = True) -> BrowserSessionHandle:
+  async def open_session(
+    self, profile_id: str | None = None, session_id: str | None = None, live_view: bool = True
+  ) -> BrowserSessionHandle:
     """Opens an interactive browser instance asynchronously.
 
     Args:
-        session_id: The session ID to associate with the browser.
+        session_id: (Deprecated, now `profile_id`) The session ID to associate with the browser.
+        profile_id: The profile ID to associate with the browser.
         live_view: Whether to enable live view for the session.
 
     Returns:
@@ -661,7 +743,7 @@ class SmoothAsyncClient(BaseClient):
     try:
       response = await self._client.post(
         f"{self.base_url}/browser/session",
-        json=BrowserSessionRequest(session_id=session_id, live_view=live_view).model_dump(exclude_none=True),
+        json=BrowserSessionRequest(profile_id=profile_id or session_id, live_view=live_view).model_dump(exclude_none=True),
       )
       data = self._handle_response(response)
       return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
@@ -669,11 +751,11 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  async def list_sessions(self) -> BrowserSessionsResponse:
-    """Lists all browser sessions for the user.
+  async def list_profiles(self):
+    """Lists all browser profiles for the user.
 
     Returns:
-        A list of existing browser sessions.
+        A list of existing browser profiles.
 
     Raises:
         ApiException: If the API request fails.
@@ -681,19 +763,29 @@ class SmoothAsyncClient(BaseClient):
     try:
       response = await self._client.get(f"{self.base_url}/browser/session")
       data = self._handle_response(response)
-      return BrowserSessionsResponse(**data["r"])
+      return BrowserProfilesResponse(**data["r"])
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  async def delete_session(self, session_id: str):
-    """Delete a browser session."""
+  @deprecated("list_sessions is deprecated, use list_profiles instead")
+  async def list_sessions(self):
+    """Lists all browser profiles for the user."""
+    return await self.list_profiles()
+
+  async def delete_profile(self, profile_id: str):
+    """Delete a browser profile."""
     try:
-      response = await self._client.delete(f"{self.base_url}/browser/session/{session_id}")
+      response = await self._client.delete(f"{self.base_url}/browser/session/{profile_id}")
       self._handle_response(response)
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  @deprecated("delete_session is deprecated, use delete_profile instead")
+  async def delete_session(self, session_id: str):
+    """Delete a browser profile."""
+    await self.delete_profile(session_id)
 
   async def upload_file(self, file: io.IOBase, name: str | None = None, purpose: str | None = None) -> UploadFileResponse:
     """Upload a file and return the file ID.
