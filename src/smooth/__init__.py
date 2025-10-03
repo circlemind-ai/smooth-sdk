@@ -6,13 +6,14 @@ import logging
 import os
 import time
 import urllib.parse
+import warnings
 from pathlib import Path
 from typing import Any, Literal, Type
-from warnings import deprecated
 
 import httpx
 import requests
-from pydantic import BaseModel, Field
+from deprecated import deprecated
+from pydantic import BaseModel, Field, model_validator
 
 # Configure logging
 logger = logging.getLogger("smooth")
@@ -76,8 +77,8 @@ class TaskRequest(BaseModel):
     default=None,
     description=("Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials."),
   )
-  profile_read_only: bool | None = Field(
-    default=None, description="If true, the profile specified by `profile_id` will be loaded in read-only mode."
+  profile_read_only: bool = Field(
+    default=False, description="If true, the profile specified by `profile_id` will be loaded in read-only mode."
   )
   stealth_mode: bool = Field(default=False, description="Run the browser in stealth mode.")
   proxy_server: str | None = Field(
@@ -88,17 +89,28 @@ class TaskRequest(BaseModel):
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: str | None = Field(default=None, description="Proxy server password.")
+  experimental_features: dict[str, Any] | None = Field(default=None, description="Experimental features to enable for the task.")
+
+  @model_validator(mode="before")
+  @classmethod
+  def _handle_deprecated_session_id(cls, data: Any) -> Any:
+    if isinstance(data, dict) and "session_id" in data:
+      warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
+      data["profile_id"] = data.pop("session_id")
+    return data
 
   @property
-  @deprecated("session_id is deprecated, use profile_id instead")
   def session_id(self):
     """(Deprecated) Returns the session ID."""
+    warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     return self.profile_id
+
   @session_id.setter
-  @deprecated("session_id is deprecated, use profile_id instead")
   def session_id(self, value):
     """(Deprecated) Sets the session ID."""
+    warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
+
 
 class BrowserSessionRequest(BaseModel):
   """Request model for creating a browser session."""
@@ -108,15 +120,24 @@ class BrowserSessionRequest(BaseModel):
   )
   live_view: bool | None = Field(default=True, description="Request a live URL to interact with the browser session.")
 
+  @model_validator(mode="before")
+  @classmethod
+  def _handle_deprecated_session_id(cls, data: Any) -> Any:
+    if isinstance(data, dict) and "session_id" in data:
+      warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
+      data["profile_id"] = data.pop("session_id")
+    return data
+
   @property
-  @deprecated("session_id is deprecated, use profile_id instead")
   def session_id(self):
     """(Deprecated) Returns the session ID."""
+    warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     return self.profile_id
+
   @session_id.setter
-  @deprecated("session_id is deprecated, use profile_id instead")
   def session_id(self, value):
     """(Deprecated) Sets the session ID."""
+    warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
 
 
@@ -126,16 +147,24 @@ class BrowserSessionResponse(BaseModel):
   profile_id: str = Field(description="The ID of the browser profile associated with the opened browser instance.")
   live_url: str | None = Field(default=None, description="The live URL to interact with the browser session.")
 
+  @model_validator(mode="before")
+  @classmethod
+  def _handle_deprecated_session_id(cls, data: Any) -> Any:
+    if isinstance(data, dict) and "session_id" in data:
+      warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
+      data["profile_id"] = data.pop("session_id")
+    return data
+
   @property
-  @deprecated("session_id is deprecated, use profile_id instead")
   def session_id(self):
     """(Deprecated) Returns the session ID."""
+    warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     return self.profile_id
 
   @session_id.setter
-  @deprecated("session_id is deprecated, use profile_id instead")
   def session_id(self, value):
     """(Deprecated) Sets the session ID."""
+    warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
 
 
@@ -144,16 +173,26 @@ class BrowserProfilesResponse(BaseModel):
 
   profile_ids: list[str] = Field(description="The IDs of the browser profiles.")
 
+  @model_validator(mode="before")
+  @classmethod
+  def _handle_deprecated_session_ids(cls, data: Any) -> Any:
+    if isinstance(data, dict) and "session_ids" in data:
+      warnings.warn("'session_ids' is deprecated, use 'profile_ids' instead", DeprecationWarning, stacklevel=2)
+      data["profile_ids"] = data.pop("session_ids")
+    return data
+
   @property
-  @deprecated("session_ids is deprecated, use profile_ids instead")
   def session_ids(self):
     """(Deprecated) Returns the session IDs."""
+    warnings.warn("'session_ids' is deprecated, use 'profile_ids' instead", DeprecationWarning, stacklevel=2)
     return self.profile_ids
+
   @session_ids.setter
-  @deprecated("session_ids is deprecated, use profile_ids instead")
   def session_ids(self, value):
     """(Deprecated) Sets the session IDs."""
+    warnings.warn("'session_ids' is deprecated, use 'profile_ids' instead", DeprecationWarning, stacklevel=2)
     self.profile_ids = value
+
 
 class BrowserSessionsResponse(BrowserProfilesResponse):
   """Response model for listing browser profiles."""

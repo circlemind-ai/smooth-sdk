@@ -10,7 +10,8 @@ requires-python = ">=3.10,<4.0"
 dependencies = [
     "pydantic (>=2.11.7,<3.0.0)",
     "httpx (>=0.28.1,<0.29.0)",
-    "requests (>=2.32.5,<3.0.0)"
+    "requests (>=2.32.5,<3.0.0)",
+    "deprecated (>=1.2.18,<2.0.0)"
 ]
 
 [project.optional-dependencies]
