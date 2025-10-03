@@ -13,7 +13,7 @@ from typing import Any, Literal, Type
 import httpx
 import requests
 from deprecated import deprecated
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Configure logging
 logger = logging.getLogger("smooth")
@@ -38,6 +38,7 @@ def _encode_url(url: str, interactive: bool = True, embed: bool = False) -> str:
 
 class TaskResponse(BaseModel):
   """Task response model."""
+  model_config = ConfigDict(extra='allow')
 
   id: str = Field(description="The ID of the task.")
   status: Literal["waiting", "running", "done", "failed"] = Field(description="The status of the task.")
@@ -89,7 +90,9 @@ class TaskRequest(BaseModel):
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: str | None = Field(default=None, description="Proxy server password.")
-  experimental_features: dict[str, Any] | None = Field(default=None, description="Experimental features to enable for the task.")
+  experimental_features: dict[str, Any] | None = Field(
+    default=None, description="Experimental features to enable for the task."
+  )
 
   @model_validator(mode="before")
   @classmethod
@@ -417,11 +420,12 @@ class SmoothClient(BaseClient):
     enable_recording: bool = False,
     session_id: str | None = None,
     profile_id: str | None = None,
-    profile_read_only: bool | None = None,
+    profile_read_only: bool = False,
     stealth_mode: bool = False,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    experimental_features: dict[str, Any] | None = None,
   ) -> TaskHandle:
     """Runs a task and returns a handle to the task.
 
@@ -447,6 +451,7 @@ class SmoothClient(BaseClient):
         proxy_server: Proxy server url to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
+        experimental_features: Experimental features to enable for the task.
 
     Returns:
         A handle to the running task.
@@ -471,6 +476,7 @@ class SmoothClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      experimental_features=experimental_features,
     )
     initial_response = self._submit_task(payload)
 
@@ -702,11 +708,12 @@ class SmoothAsyncClient(BaseClient):
     enable_recording: bool = False,
     session_id: str | None = None,
     profile_id: str | None = None,
-    profile_read_only: bool | None = None,
+    profile_read_only: bool = False,
     stealth_mode: bool = False,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    experimental_features: dict[str, Any] | None = None,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
 
@@ -732,8 +739,7 @@ class SmoothAsyncClient(BaseClient):
         proxy_server: Proxy server url to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
-        poll_interval: The time in seconds to wait between polling for status.
-        timeout: The maximum time in seconds to wait for the task to complete.
+        experimental_features: Experimental features to enable for the task.
 
     Returns:
         A handle to the running task.
@@ -758,6 +764,7 @@ class SmoothAsyncClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      experimental_features=experimental_features,
     )
 
     initial_response = await self._submit_task(payload)
