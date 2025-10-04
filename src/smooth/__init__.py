@@ -38,10 +38,11 @@ def _encode_url(url: str, interactive: bool = True, embed: bool = False) -> str:
 
 class TaskResponse(BaseModel):
   """Task response model."""
-  model_config = ConfigDict(extra='allow')
+
+  model_config = ConfigDict(extra="allow")
 
   id: str = Field(description="The ID of the task.")
-  status: Literal["waiting", "running", "done", "failed"] = Field(description="The status of the task.")
+  status: Literal["waiting", "running", "done", "failed", "cancelled"] = Field(description="The status of the task.")
   output: Any | None = Field(default=None, description="The output of the task.")
   credits_used: int | None = Field(default=None, description="The amount of credits used to perform the task.")
   device: Literal["desktop", "mobile"] | None = Field(default=None, description="The device type used for the task.")
@@ -148,6 +149,7 @@ class BrowserSessionResponse(BaseModel):
   """Browser session response model."""
 
   profile_id: str = Field(description="The ID of the browser profile associated with the opened browser instance.")
+  live_id: str | None = Field(description="The ID of the live browser session.")
   live_url: str | None = Field(default=None, description="The live URL to interact with the browser session.")
 
   @model_validator(mode="before")
@@ -199,6 +201,7 @@ class BrowserProfilesResponse(BaseModel):
 
 class BrowserSessionsResponse(BrowserProfilesResponse):
   """Response model for listing browser profiles."""
+
   pass
 
 
@@ -311,6 +314,15 @@ class TaskHandle:
   def id(self):
     """Returns the task ID."""
     return self._id
+
+  def stop(self):
+    """Stops the task."""
+    try:
+      response = self._client._client.delete(f"{self._client.base_url}/task/{self._id}")
+      self._handle_response(response)
+    except requests.exceptions.RequestException as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
   def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
@@ -505,6 +517,15 @@ class SmoothClient(BaseClient):
       )
       data = self._handle_response(response)
       return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
+    except requests.exceptions.RequestException as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  def close_session(self, live_id: str):
+    """Closes a browser session."""
+    try:
+      response = self._session.delete(f"{self.base_url}/browser/session/{live_id}")
+      self._handle_response(response)
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
@@ -793,6 +814,15 @@ class SmoothAsyncClient(BaseClient):
       )
       data = self._handle_response(response)
       return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def close_session(self, live_id: str):
+    """Closes a browser session."""
+    try:
+      response = await self._client.delete(f"{self.base_url}/browser/session/{live_id}")
+      self._handle_response(response)
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
