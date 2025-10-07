@@ -343,7 +343,7 @@ class TaskHandle:
       time.sleep(poll_interval)
     raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
 
-  def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
+  def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
     if self._task_response and self._task_response.live_url:
       return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
