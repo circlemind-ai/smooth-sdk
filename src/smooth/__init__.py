@@ -53,6 +53,8 @@ class TaskResponse(BaseModel):
 class TaskRequest(BaseModel):
   """Run task request model."""
 
+  model_config = ConfigDict(extra="allow")
+
   task: str = Field(description="The task to run.")
   response_model: dict[str, Any] | None = Field(
     default=None, description="If provided, the JSON schema describing the desired output structure. Default is None"
@@ -115,6 +117,14 @@ class TaskRequest(BaseModel):
     warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
 
+  def model_dump(self, **kwargs) -> dict[str, Any]:
+    """Dump model to dict, including deprecated session_id for retrocompatibility."""
+    data = super().model_dump(**kwargs)
+    # Add deprecated session_id field for retrocompatibility
+    if "profile_id" in data:
+      data["session_id"] = data["profile_id"]
+    return data
+
 
 class BrowserSessionRequest(BaseModel):
   """Request model for creating a browser session."""
@@ -144,6 +154,14 @@ class BrowserSessionRequest(BaseModel):
     warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
 
+  def model_dump(self, **kwargs) -> dict[str, Any]:
+    """Dump model to dict, including deprecated session_id for retrocompatibility."""
+    data = super().model_dump(**kwargs)
+    # Add deprecated session_id field for retrocompatibility
+    if "profile_id" in data:
+      data["session_id"] = data["profile_id"]
+    return data
+
 
 class BrowserSessionResponse(BaseModel):
   """Browser session response model."""
@@ -172,6 +190,14 @@ class BrowserSessionResponse(BaseModel):
     warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
 
+  def model_dump(self, **kwargs) -> dict[str, Any]:
+    """Dump model to dict, including deprecated session_id for retrocompatibility."""
+    data = super().model_dump(**kwargs)
+    # Add deprecated session_id field for retrocompatibility
+    if "profile_id" in data:
+      data["session_id"] = data["profile_id"]
+    return data
+
 
 class BrowserProfilesResponse(BaseModel):
   """Response model for listing browser profiles."""
@@ -197,6 +223,14 @@ class BrowserProfilesResponse(BaseModel):
     """(Deprecated) Sets the session IDs."""
     warnings.warn("'session_ids' is deprecated, use 'profile_ids' instead", DeprecationWarning, stacklevel=2)
     self.profile_ids = value
+
+  def model_dump(self, **kwargs) -> dict[str, Any]:
+    """Dump model to dict, including deprecated session_ids for retrocompatibility."""
+    data = super().model_dump(**kwargs)
+    # Add deprecated session_ids field for retrocompatibility
+    if "profile_ids" in data:
+      data["session_ids"] = data["profile_ids"]
+    return data
 
 
 class BrowserSessionsResponse(BrowserProfilesResponse):
