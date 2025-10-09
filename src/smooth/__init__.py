@@ -347,12 +347,7 @@ class TaskHandle:
 
   def stop(self):
     """Stops the task."""
-    try:
-      response = self._client._client.delete(f"{self._client.base_url}/task/{self._id}")
-      self._handle_response(response)
-    except requests.exceptions.RequestException as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+    self._client._delete_task(self._id)
 
   def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
@@ -444,6 +439,18 @@ class SmoothClient(BaseClient):
       response = self._session.get(f"{self.base_url}/task/{task_id}")
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
+    except requests.exceptions.RequestException as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  def _delete_task(self, task_id: str):
+    """Deletes a task."""
+    if not task_id:
+      raise ValueError("Task ID cannot be empty.")
+
+    try:
+      response = self._session.delete(f"{self.base_url}/task/{task_id}")
+      self._handle_response(response)
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
@@ -656,6 +663,10 @@ class AsyncTaskHandle:
     """Returns the task ID."""
     return self._id
 
+  async def stop(self):
+    """Stops the task."""
+    await self._client._delete_task(self._id)
+
   async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
     if self._task_response and self._task_response.status not in ["running", "waiting"]:
@@ -741,6 +752,18 @@ class SmoothAsyncClient(BaseClient):
       response = await self._client.get(f"{self.base_url}/task/{task_id}")
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def _delete_task(self, task_id: str):
+    """Deletes a task asynchronously."""
+    if not task_id:
+      raise ValueError("Task ID cannot be empty.")
+
+    try:
+      response = await self._client.delete(f"{self.base_url}/task/{task_id}")
+      self._handle_response(response)
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
