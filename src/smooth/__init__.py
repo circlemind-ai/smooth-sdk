@@ -13,13 +13,13 @@ from typing import Any, Literal, Type
 import httpx
 import requests
 from deprecated import deprecated
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 # Configure logging
 logger = logging.getLogger("smooth")
 
 
-BASE_URL = "https://api2.circlemind.co/api/"
+BASE_URL = "https://api.smooth.sh/api/"
 
 
 # --- Utils ---
@@ -100,11 +100,12 @@ class TaskRequest(BaseModel):
   @model_validator(mode="before")
   @classmethod
   def _handle_deprecated_session_id(cls, data: Any) -> Any:
-    if isinstance(data, dict) and "session_id" in data:
+    if isinstance(data, dict) and "session_id" in data and "profile_id" not in data:
       warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
       data["profile_id"] = data.pop("session_id")
     return data
 
+  @computed_field(return_type=str | None)
   @property
   def session_id(self):
     """(Deprecated) Returns the session ID."""
@@ -137,11 +138,12 @@ class BrowserSessionRequest(BaseModel):
   @model_validator(mode="before")
   @classmethod
   def _handle_deprecated_session_id(cls, data: Any) -> Any:
-    if isinstance(data, dict) and "session_id" in data:
+    if isinstance(data, dict) and "session_id" in data and "profile_id" not in data:
       warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
       data["profile_id"] = data.pop("session_id")
     return data
 
+  @computed_field(return_type=str | None)
   @property
   def session_id(self):
     """(Deprecated) Returns the session ID."""
@@ -173,11 +175,12 @@ class BrowserSessionResponse(BaseModel):
   @model_validator(mode="before")
   @classmethod
   def _handle_deprecated_session_id(cls, data: Any) -> Any:
-    if isinstance(data, dict) and "session_id" in data:
+    if isinstance(data, dict) and "session_id" in data and "profile_id" not in data:
       warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
       data["profile_id"] = data.pop("session_id")
     return data
 
+  @computed_field(return_type=str | None)
   @property
   def session_id(self):
     """(Deprecated) Returns the session ID."""
@@ -190,14 +193,6 @@ class BrowserSessionResponse(BaseModel):
     warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
 
-  def model_dump(self, **kwargs) -> dict[str, Any]:
-    """Dump model to dict, including deprecated session_id for retrocompatibility."""
-    data = super().model_dump(**kwargs)
-    # Add deprecated session_id field for retrocompatibility
-    if "profile_id" in data:
-      data["session_id"] = data["profile_id"]
-    return data
-
 
 class BrowserProfilesResponse(BaseModel):
   """Response model for listing browser profiles."""
@@ -207,11 +202,12 @@ class BrowserProfilesResponse(BaseModel):
   @model_validator(mode="before")
   @classmethod
   def _handle_deprecated_session_ids(cls, data: Any) -> Any:
-    if isinstance(data, dict) and "session_ids" in data:
+    if isinstance(data, dict) and "session_ids" in data and "profile_ids" not in data:
       warnings.warn("'session_ids' is deprecated, use 'profile_ids' instead", DeprecationWarning, stacklevel=2)
       data["profile_ids"] = data.pop("session_ids")
     return data
 
+  @computed_field(return_type=list[str])
   @property
   def session_ids(self):
     """(Deprecated) Returns the session IDs."""
