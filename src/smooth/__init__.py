@@ -113,12 +113,12 @@ class TaskRequest(BaseModel):
     return self.profile_id
 
   @session_id.setter
-  def session_id(self, value):
+  def session_id(self, value: str | None):
     """(Deprecated) Sets the session ID."""
     warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
 
-  def model_dump(self, **kwargs) -> dict[str, Any]:
+  def model_dump(self, **kwargs: Any) -> dict[str, Any]:
     """Dump model to dict, including deprecated session_id for retrocompatibility."""
     data = super().model_dump(**kwargs)
     # Add deprecated session_id field for retrocompatibility
@@ -151,12 +151,12 @@ class BrowserSessionRequest(BaseModel):
     return self.profile_id
 
   @session_id.setter
-  def session_id(self, value):
+  def session_id(self, value: str | None):
     """(Deprecated) Sets the session ID."""
     warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
 
-  def model_dump(self, **kwargs) -> dict[str, Any]:
+  def model_dump(self, **kwargs: Any) -> dict[str, Any]:
     """Dump model to dict, including deprecated session_id for retrocompatibility."""
     data = super().model_dump(**kwargs)
     # Add deprecated session_id field for retrocompatibility
@@ -188,7 +188,7 @@ class BrowserSessionResponse(BaseModel):
     return self.profile_id
 
   @session_id.setter
-  def session_id(self, value):
+  def session_id(self, value: str):
     """(Deprecated) Sets the session ID."""
     warnings.warn("'session_id' is deprecated, use 'profile_id' instead", DeprecationWarning, stacklevel=2)
     self.profile_id = value
@@ -215,12 +215,12 @@ class BrowserProfilesResponse(BaseModel):
     return self.profile_ids
 
   @session_ids.setter
-  def session_ids(self, value):
+  def session_ids(self, value: list[str]):
     """(Deprecated) Sets the session IDs."""
     warnings.warn("'session_ids' is deprecated, use 'profile_ids' instead", DeprecationWarning, stacklevel=2)
     self.profile_ids = value
 
-  def model_dump(self, **kwargs) -> dict[str, Any]:
+  def model_dump(self, **kwargs: Any) -> dict[str, Any]:
     """Dump model to dict, including deprecated session_ids for retrocompatibility."""
     data = super().model_dump(**kwargs)
     # Add deprecated session_ids field for retrocompatibility
@@ -510,7 +510,7 @@ class SmoothClient(BaseClient):
     """
     payload = TaskRequest(
       task=task,
-      response_model=response_model.model_json_schema() if issubclass(response_model, BaseModel) else response_model,
+      response_model=response_model if isinstance(response_model, dict | None) else response_model.model_json_schema(),
       url=url,
       metadata=metadata,
       files=files,
@@ -696,7 +696,7 @@ class AsyncTaskHandle:
       task_response = await self._client._get_task(self.id())
       self._task_response = task_response
       if task_response.live_url is not None:
-        return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+        return _encode_url(task_response.live_url, interactive=interactive, embed=embed)
       await asyncio.sleep(1)
 
     raise TimeoutError(f"Live URL not available for task {self.id()}.")
@@ -823,7 +823,7 @@ class SmoothAsyncClient(BaseClient):
     """
     payload = TaskRequest(
       task=task,
-      response_model=response_model.model_json_schema() if issubclass(response_model, BaseModel) else response_model,
+      response_model=response_model if isinstance(response_model, dict | None) else response_model.model_json_schema(),
       url=url,
       metadata=metadata,
       files=files,
