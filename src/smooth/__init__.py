@@ -486,7 +486,7 @@ class SmoothClient(BaseClient):
         response_model: If provided, the schema describing the desired output structure.
         url: The starting URL for the task. If not provided, the agent will infer it from the task.
         metadata: A dictionary containing variables or parameters that will be passed to the agent.
-        files: A dictionary of file names to their ids. These files will be passed to the agent.
+        files: A list of file ids to pass to the agent.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -686,7 +686,7 @@ class AsyncTaskHandle:
       await asyncio.sleep(poll_interval)
     raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
 
-  async def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
+  async def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
     if self._task_response and self._task_response.live_url:
       return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
@@ -695,13 +695,13 @@ class AsyncTaskHandle:
     while timeout is None or (time.time() - start_time) < timeout:
       task_response = await self._client._get_task(self.id())
       self._task_response = task_response
-      if task_response.live_url is not None:
-        return _encode_url(task_response.live_url, interactive=interactive, embed=embed)
+      if self._task_response.live_url:
+        return _encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
       await asyncio.sleep(1)
 
     raise TimeoutError(f"Live URL not available for task {self.id()}.")
 
-  async def recording_url(self, timeout: int | None = None):
+  async def recording_url(self, timeout: int | None = None) -> str:
     """Returns the recording URL for the task."""
     if self._task_response and self._task_response.recording_url is not None:
       return self._task_response.recording_url
@@ -799,7 +799,7 @@ class SmoothAsyncClient(BaseClient):
         response_model: If provided, the schema describing the desired output structure.
         url: The starting URL for the task. If not provided, the agent will infer it from the task.
         metadata: A dictionary containing variables or parameters that will be passed to the agent.
-        files: A dictionary of file names to their url or base64-encoded content to be used by the agent.
+        files: A list of file ids to pass to the agent.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is mobile.
@@ -850,8 +850,8 @@ class SmoothAsyncClient(BaseClient):
     """Opens an interactive browser instance asynchronously.
 
     Args:
+        profile_id: The profile ID to use for the session. If None, a new profile will be created.
         session_id: (Deprecated, now `profile_id`) The session ID to associate with the browser.
-        profile_id: The profile ID to associate with the browser.
         live_view: Whether to enable live view for the session.
 
     Returns:
@@ -936,11 +936,12 @@ class SmoothAsyncClient(BaseClient):
       if name is None:
         raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
 
-      files = {"file": (Path(name).name, file)}
       if purpose:
         data = {"file_purpose": purpose}
       else:
         data = None
+
+      files = {"file": (Path(name).name, file)}
       response = await self._client.post(f"{self.base_url}/file", files=files, data=data)
       data = self._handle_response(response)
       return UploadFileResponse(**data["r"])
