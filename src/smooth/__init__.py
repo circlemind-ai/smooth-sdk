@@ -82,7 +82,10 @@ class TaskRequest(BaseModel):
     description=("Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials."),
   )
   profile_read_only: bool = Field(
-    default=False, description="If true, the profile specified by `profile_id` will be loaded in read-only mode."
+    default=False, description=(
+      "If true, the profile specified by `profile_id` will be loaded in read-only mode. "
+      "Changes made during the task will not be saved back to the profile."
+    )
   )
   stealth_mode: bool = Field(default=False, description="Run the browser in stealth mode.")
   proxy_server: str | None = Field(
@@ -329,6 +332,10 @@ class BrowserSessionHandle(BaseModel):
     if self.browser_session.live_url:
       return _encode_url(self.browser_session.live_url, interactive=interactive, embed=embed)
     return None
+
+  def live_id(self):
+    """Returns the live ID for the browser session."""
+    return self.browser_session.live_id
 
 
 class TaskHandle:
