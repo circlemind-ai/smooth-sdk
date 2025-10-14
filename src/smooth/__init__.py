@@ -577,7 +577,7 @@ class SmoothClient(BaseClient):
         ApiException: If the API request fails.
     """
     try:
-      response = self._session.get(f"{self.base_url}/browser/session")
+      response = self._session.get(f"{self.base_url}/browser/profile")
       data = self._handle_response(response)
       return BrowserProfilesResponse(**data["r"])
     except requests.exceptions.RequestException as e:
@@ -592,7 +592,7 @@ class SmoothClient(BaseClient):
   def delete_profile(self, profile_id: str):
     """Delete a browser profile."""
     try:
-      response = self._session.delete(f"{self.base_url}/browser/session/{profile_id}")
+      response = self._session.delete(f"{self.base_url}/browser/profile/{profile_id}")
       self._handle_response(response)
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
@@ -890,7 +890,7 @@ class SmoothAsyncClient(BaseClient):
         ApiException: If the API request fails.
     """
     try:
-      response = await self._client.get(f"{self.base_url}/browser/session")
+      response = await self._client.get(f"{self.base_url}/browser/profile")
       data = self._handle_response(response)
       return BrowserProfilesResponse(**data["r"])
     except httpx.RequestError as e:
@@ -905,7 +905,7 @@ class SmoothAsyncClient(BaseClient):
   async def delete_profile(self, profile_id: str):
     """Delete a browser profile."""
     try:
-      response = await self._client.delete(f"{self.base_url}/browser/session/{profile_id}")
+      response = await self._client.delete(f"{self.base_url}/browser/profile/{profile_id}")
       self._handle_response(response)
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
