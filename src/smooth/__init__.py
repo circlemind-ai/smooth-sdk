@@ -82,10 +82,11 @@ class TaskRequest(BaseModel):
     description=("Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials."),
   )
   profile_read_only: bool = Field(
-    default=False, description=(
+    default=False,
+    description=(
       "If true, the profile specified by `profile_id` will be loaded in read-only mode. "
       "Changes made during the task will not be saved back to the profile."
-    )
+    ),
   )
   stealth_mode: bool = Field(default=False, description="Run the browser in stealth mode.")
   proxy_server: str | None = Field(
@@ -400,6 +401,14 @@ class TaskHandle:
       task_response = self._client._get_task(self.id())
       self._task_response = task_response
       if task_response.recording_url is not None:
+        if not task_response.recording_url:
+          raise ApiError(
+            status_code=404,
+            detail=(
+              f"Recording URL not available for task {self.id()}."
+              " Set `enable_recording=True` when creating the task to enable it."
+            )
+          )
         return task_response.recording_url
       time.sleep(1)
     raise TimeoutError(f"Recording URL not available for task {self.id()}.")
@@ -718,6 +727,14 @@ class AsyncTaskHandle:
       task_response = await self._client._get_task(self.id())
       self._task_response = task_response
       if task_response.recording_url is not None:
+        if not task_response.recording_url:
+          raise ApiError(
+            status_code=404,
+            detail=(
+              f"Recording URL not available for task {self.id()}."
+              " Set `enable_recording=True` when creating the task to enable it."
+            )
+          )
         return task_response.recording_url
       await asyncio.sleep(1)
 
