@@ -1,6 +1,7 @@
 """Smooth python SDK."""
 
 import asyncio
+import base64
 import io
 import logging
 import os
@@ -8,7 +9,7 @@ import time
 import urllib.parse
 import warnings
 from pathlib import Path
-from typing import Any, Literal, Type
+from typing import Any, Literal, NotRequired, Type, TypedDict
 
 import httpx
 import requests
@@ -33,7 +34,47 @@ def _encode_url(url: str, interactive: bool = True, embed: bool = False) -> str:
 
 
 # --- Models ---
-# These models define the data structures for API requests and responses.
+
+class Certificate(TypedDict):
+  """Client certificate for accessing secure websites.
+
+  Attributes:
+      file: p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
+      password: Password to decrypt the certificate file. Optional.
+  """
+
+  file: str | io.IOBase  # Required - base64 string or binary IO
+  password: NotRequired[str]  # Optional
+  filters: NotRequired[list[str]]  # Optional - TODO: Reserved for future use to specify URL patterns where the certificate should be applied.
+
+
+def _process_certificates(certificates: list[Certificate] | None) -> list[dict[str, Any]] | None:
+  """Process certificates, converting binary IO to base64-encoded strings.
+
+  Args:
+      certificates: List of certificates with file field as string or binary IO.
+
+  Returns:
+      List of certificates with file field as base64-encoded string, or None if input is None.
+  """
+  if certificates is None:
+    return None
+
+  processed_certs = []
+  for cert in certificates:
+    processed_cert = dict(cert)  # Create a copy
+
+    file_content = processed_cert["file"]
+    if isinstance(file_content, io.IOBase):
+      # Read the binary content and encode to base64
+      binary_data = file_content.read()
+      processed_cert["file"] = base64.b64encode(binary_data).decode("utf-8")
+    elif not isinstance(file_content, str):
+      raise TypeError(f"Certificate file must be a string or binary IO, got {type(file_content)}")
+
+    processed_certs.append(processed_cert)
+
+  return processed_certs
 
 
 class TaskResponse(BaseModel):
@@ -48,6 +89,7 @@ class TaskResponse(BaseModel):
   device: Literal["desktop", "mobile"] | None = Field(default=None, description="The device type used for the task.")
   live_url: str | None = Field(default=None, description="The URL to view and interact with the task execution.")
   recording_url: str | None = Field(default=None, description="The URL to view the task recording.")
+  created_at: int | None = Field(default=None, description="The timestamp when the task was created.")
 
 
 class TaskRequest(BaseModel):
@@ -97,6 +139,15 @@ class TaskRequest(BaseModel):
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: str | None = Field(default=None, description="Proxy server password.")
+  certificates: list[dict[str, Any]] | None = Field(
+    default=None,
+    description=(
+      "List of client certificates to use when accessing secure websites. "
+      "Each certificate is a dictionary with the following fields:\n"
+      " - `file`: p12 file object to be uploaded (e.g., open('cert.p12', 'rb')).\n"
+      " - `password` (optional): Password to decrypt the certificate file."
+    ),
+  )
   experimental_features: dict[str, Any] | None = Field(
     default=None, description="Experimental features to enable for the task."
   )
@@ -490,6 +541,7 @@ class SmoothClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    certificates: list[Certificate] | None = None,
     experimental_features: dict[str, Any] | None = None,
   ) -> TaskHandle:
     """Runs a task and returns a handle to the task.
@@ -516,6 +568,10 @@ class SmoothClient(BaseClient):
         proxy_server: Proxy server url to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
+        certificates: List of client certificates to use when accessing secure websites.
+          Each certificate is a dictionary with the following fields:
+          - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
+          - `password` (optional): Password to decrypt the certificate file, if password-protected.
         experimental_features: Experimental features to enable for the task.
 
     Returns:
@@ -541,6 +597,7 @@ class SmoothClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      certificates=_process_certificates(certificates),
       experimental_features=experimental_features,
     )
     initial_response = self._submit_task(payload)
@@ -811,6 +868,7 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    certificates: list[Certificate] | None = None,
     experimental_features: dict[str, Any] | None = None,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
@@ -837,6 +895,10 @@ class SmoothAsyncClient(BaseClient):
         proxy_server: Proxy server url to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
+        certificates: List of client certificates to use when accessing secure websites.
+          Each certificate is a dictionary with the following fields:
+          - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
+          - `password` (optional): Password to decrypt the certificate file.
         experimental_features: Experimental features to enable for the task.
 
     Returns:
@@ -862,6 +924,7 @@ class SmoothAsyncClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      certificates=_process_certificates(certificates),
       experimental_features=experimental_features,
     )
 
@@ -1000,6 +1063,7 @@ __all__ = [
   "BrowserSessionResponse",
   "BrowserSessionsResponse",
   "UploadFileResponse",
+  "Certificate",
   "ApiError",
   "TimeoutError",
 ]
