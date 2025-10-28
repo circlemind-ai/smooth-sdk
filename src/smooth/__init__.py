@@ -89,6 +89,7 @@ class TaskResponse(BaseModel):
   device: Literal["desktop", "mobile"] | None = Field(default=None, description="The device type used for the task.")
   live_url: str | None = Field(default=None, description="The URL to view and interact with the task execution.")
   recording_url: str | None = Field(default=None, description="The URL to view the task recording.")
+  downloads_url: str | None = Field(default=None, description="The URL of the archive containing the downloaded files.")
   created_at: int | None = Field(default=None, description="The timestamp when the task was created.")
 
 
@@ -111,7 +112,7 @@ class TaskRequest(BaseModel):
   files: list[str] | None = Field(default=None, description="A list of file ids to pass to the agent.")
   agent: Literal["smooth", "smooth-lite"] = Field(default="smooth", description="The agent to use for the task.")
   max_steps: int = Field(default=32, ge=2, le=128, description="Maximum number of steps the agent can take (min 2, max 128).")
-  device: Literal["desktop", "mobile"] = Field(default="mobile", description="Device type for the task. Default is mobile.")
+  device: Literal["desktop", "mobile"] = Field(default="desktop", description="Device type for the task. Default is desktop.")
   allowed_urls: list[str] | None = Field(
     default=None,
     description=(
@@ -148,6 +149,7 @@ class TaskRequest(BaseModel):
       " - `password` (optional): Password to decrypt the certificate file."
     ),
   )
+  use_adblock: bool | None = Field(default=True, description="Enable adblock for the browser session. Default is True.")
   experimental_features: dict[str, Any] | None = Field(
     default=None, description="Experimental features to enable for the task."
   )
@@ -464,6 +466,28 @@ class TaskHandle:
       time.sleep(1)
     raise TimeoutError(f"Recording URL not available for task {self.id()}.")
 
+  def downloads_url(self, timeout: int | None = None) -> str:
+    """Returns the downloads URL for the task."""
+    if self._task_response and self._task_response.downloads_url is not None:
+      return self._task_response.downloads_url
+
+    start_time = time.time()
+    while timeout is None or (time.time() - start_time) < timeout:
+      task_response = self._client._get_task(self.id(), query_params={"downloads": "true"})
+      self._task_response = task_response
+      if task_response.downloads_url is not None:
+        if not task_response.downloads_url:
+          raise ApiError(
+            status_code=404,
+            detail=(
+              f"Downloads URL not available for task {self.id()}."
+              " Make sure the task downloaded files during its execution."
+            )
+          )
+        return task_response.downloads_url
+      time.sleep(1)
+    raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
+
 
 class SmoothClient(BaseClient):
   """A synchronous client for the API."""
@@ -490,20 +514,21 @@ class SmoothClient(BaseClient):
   def _submit_task(self, payload: TaskRequest) -> TaskResponse:
     """Submits a task to be run."""
     try:
-      response = self._session.post(f"{self.base_url}/task", json=payload.model_dump(exclude_none=True))
+      response = self._session.post(f"{self.base_url}/task", json=payload.model_dump())
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  def _get_task(self, task_id: str) -> TaskResponse:
+  def _get_task(self, task_id: str, query_params: dict[str, Any] | None = None) -> TaskResponse:
     """Retrieves the status and result of a task."""
     if not task_id:
       raise ValueError("Task ID cannot be empty.")
 
     try:
-      response = self._session.get(f"{self.base_url}/task/{task_id}")
+      url = f"{self.base_url}/task/{task_id}"
+      response = self._session.get(url, params=query_params)
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
     except requests.exceptions.RequestException as e:
@@ -542,6 +567,7 @@ class SmoothClient(BaseClient):
     proxy_username: str | None = None,
     proxy_password: str | None = None,
     certificates: list[Certificate] | None = None,
+    use_adblock: bool | None = True,
     experimental_features: dict[str, Any] | None = None,
   ) -> TaskHandle:
     """Runs a task and returns a handle to the task.
@@ -572,6 +598,7 @@ class SmoothClient(BaseClient):
           Each certificate is a dictionary with the following fields:
           - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
           - `password` (optional): Password to decrypt the certificate file, if password-protected.
+        use_adblock: Enable adblock for the browser session. Default is True.
         experimental_features: Experimental features to enable for the task.
 
     Returns:
@@ -598,6 +625,7 @@ class SmoothClient(BaseClient):
       proxy_username=proxy_username,
       proxy_password=proxy_password,
       certificates=_process_certificates(certificates),
+      use_adblock=use_adblock,
       experimental_features=experimental_features,
     )
     initial_response = self._submit_task(payload)
@@ -623,7 +651,7 @@ class SmoothClient(BaseClient):
     try:
       response = self._session.post(
         f"{self.base_url}/browser/session",
-        json=BrowserSessionRequest(profile_id=profile_id or session_id, live_view=live_view).model_dump(exclude_none=True),
+        json=BrowserSessionRequest(profile_id=profile_id or session_id, live_view=live_view).model_dump(),
       )
       data = self._handle_response(response)
       return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
@@ -797,6 +825,29 @@ class AsyncTaskHandle:
 
     raise TimeoutError(f"Recording URL not available for task {self.id()}.")
 
+  async def downloads_url(self, timeout: int | None = None) -> str:
+    """Returns the downloads URL for the task."""
+    if self._task_response and self._task_response.downloads_url is not None:
+      return self._task_response.downloads_url
+
+    start_time = time.time()
+    while timeout is None or (time.time() - start_time) < timeout:
+      task_response = await self._client._get_task(self.id(), query_params={"downloads": "true"})
+      self._task_response = task_response
+      if task_response.downloads_url is not None:
+        if not task_response.downloads_url:
+          raise ApiError(
+            status_code=404,
+            detail=(
+              f"Downloads URL not available for task {self.id()}."
+              " Make sure the task downloaded files during its execution."
+            )
+          )
+        return task_response.downloads_url
+      await asyncio.sleep(1)
+
+    raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
+
 
 class SmoothAsyncClient(BaseClient):
   """An asynchronous client for the API."""
@@ -817,20 +868,21 @@ class SmoothAsyncClient(BaseClient):
   async def _submit_task(self, payload: TaskRequest) -> TaskResponse:
     """Submits a task to be run asynchronously."""
     try:
-      response = await self._client.post(f"{self.base_url}/task", json=payload.model_dump(exclude_none=True))
+      response = await self._client.post(f"{self.base_url}/task", json=payload.model_dump())
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
-  async def _get_task(self, task_id: str) -> TaskResponse:
+  async def _get_task(self, task_id: str, query_params: dict[str, Any] | None = None) -> TaskResponse:
     """Retrieves the status and result of a task asynchronously."""
     if not task_id:
       raise ValueError("Task ID cannot be empty.")
 
     try:
-      response = await self._client.get(f"{self.base_url}/task/{task_id}")
+      url = f"{self.base_url}/task/{task_id}"
+      response = await self._client.get(url, params=query_params)
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
     except httpx.RequestError as e:
@@ -869,6 +921,7 @@ class SmoothAsyncClient(BaseClient):
     proxy_username: str | None = None,
     proxy_password: str | None = None,
     certificates: list[Certificate] | None = None,
+    use_adblock: bool | None = True,
     experimental_features: dict[str, Any] | None = None,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
@@ -899,6 +952,7 @@ class SmoothAsyncClient(BaseClient):
           Each certificate is a dictionary with the following fields:
           - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
           - `password` (optional): Password to decrypt the certificate file.
+        use_adblock: Enable adblock for the browser session. Default is True.
         experimental_features: Experimental features to enable for the task.
 
     Returns:
@@ -925,6 +979,7 @@ class SmoothAsyncClient(BaseClient):
       proxy_username=proxy_username,
       proxy_password=proxy_password,
       certificates=_process_certificates(certificates),
+      use_adblock=use_adblock,
       experimental_features=experimental_features,
     )
 
@@ -950,7 +1005,7 @@ class SmoothAsyncClient(BaseClient):
     try:
       response = await self._client.post(
         f"{self.base_url}/browser/session",
-        json=BrowserSessionRequest(profile_id=profile_id or session_id, live_view=live_view).model_dump(exclude_none=True),
+        json=BrowserSessionRequest(profile_id=profile_id or session_id, live_view=live_view).model_dump(),
       )
       data = self._handle_response(response)
       return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))
