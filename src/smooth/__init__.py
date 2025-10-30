@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false
 """Smooth python SDK."""
 
 import asyncio
@@ -60,7 +61,7 @@ def _process_certificates(certificates: list[Certificate] | None) -> list[dict[s
   if certificates is None:
     return None
 
-  processed_certs = []
+  processed_certs: list[dict[str, Any]] = []
   for cert in certificates:
     processed_cert = dict(cert)  # Create a copy
 
@@ -191,6 +192,7 @@ class BrowserSessionRequest(BaseModel):
     default=None, description=("The profile ID to use for the browser session. If None, a new profile will be created.")
   )
   live_view: bool | None = Field(default=True, description="Request a live URL to interact with the browser session.")
+  device: Literal["desktop", "mobile"] | None = Field(default="desktop", description="The device type to use.")
 
   @model_validator(mode="before")
   @classmethod
