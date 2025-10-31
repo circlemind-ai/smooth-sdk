@@ -257,6 +257,8 @@ class TaskRequest(BaseModel):
 class BrowserSessionRequest(BaseModel):
     """Request model for creating a browser session."""
 
+    model_config = ConfigDict(extra="allow")
+
     profile_id: str | None = Field(
         default=None,
         description=(
@@ -319,10 +321,12 @@ class BrowserSessionRequest(BaseModel):
 class BrowserSessionResponse(BaseModel):
     """Browser session response model."""
 
+    model_config = ConfigDict(extra="allow")
+
     profile_id: str = Field(
         description="The ID of the browser profile associated with the opened browser instance."
     )
-    live_id: str | None = Field(description="The ID of the live browser session.")
+    live_id: str | None = Field(default=None, description="The ID of the live browser session.")
     live_url: str | None = Field(
         default=None, description="The live URL to interact with the browser session."
     )
@@ -363,6 +367,8 @@ class BrowserSessionResponse(BaseModel):
 
 class BrowserProfilesResponse(BaseModel):
     """Response model for listing browser profiles."""
+
+    model_config = ConfigDict(extra="allow")
 
     profile_ids: list[str] = Field(description="The IDs of the browser profiles.")
 
@@ -420,6 +426,8 @@ class BrowserSessionsResponse(BrowserProfilesResponse):
 
 class UploadFileResponse(BaseModel):
     """Response model for uploading a file."""
+
+    model_config = ConfigDict(extra="allow")
 
     id: str = Field(description="The ID assigned to the uploaded file.")
 
