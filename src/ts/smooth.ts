@@ -101,6 +101,7 @@ interface TaskRequestPayload {
   proxy_password?: string | null;
   certificates?: ProcessedCertificate[] | null;
   use_adblock?: boolean | null;
+  additional_tools?: Record<string, Record<string, any> | null> | null;
   experimental_features?: Record<string, any> | null;
 }
 
@@ -137,6 +138,10 @@ export interface RunTaskOptions {
    * Enable adblock for the browser session. Default is True.
    */
   use_adblock?: boolean | null;
+  /**
+   * Additional tools to enable for the task.
+   */
+  additional_tools?: Record<string, Record<string, any> | null> | null;
   experimental_features?: Record<string, any> | null;
 }
 
@@ -618,6 +623,7 @@ export class SmoothClient {
       proxy_password: options.proxy_password,
       certificates: processed_certificates,
       use_adblock: options.use_adblock ?? true,
+      additional_tools: options.additional_tools,
       experimental_features: options.experimental_features,
     };
 
