@@ -1,6 +1,6 @@
 {
   "name": "@circlemind-ai/smooth-ts",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "",
   "main": "smooth.ts",
   "scripts": {
