@@ -208,6 +208,9 @@ class TaskRequest(BaseModel):
         default=True,
         description="Enable adblock for the browser session. Default is True.",
     )
+    additional_tools: dict[str, Any] | None = Field(
+        default=None, description="Additional tools to enable for the task."
+    )
     experimental_features: dict[str, Any] | None = Field(
         default=None, description="Experimental features to enable for the task."
     )
@@ -746,6 +749,7 @@ class SmoothClient(BaseClient):
         proxy_password: str | None = None,
         certificates: list[Certificate] | None = None,
         use_adblock: bool | None = True,
+        additional_tools: dict[str, Any] | None = None,
         experimental_features: dict[str, Any] | None = None,
     ) -> TaskHandle:
         """Runs a task and returns a handle to the task.
@@ -777,6 +781,7 @@ class SmoothClient(BaseClient):
               - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
               - `password` (optional): Password to decrypt the certificate file, if password-protected.
             use_adblock: Enable adblock for the browser session. Default is True.
+            additional_tools: Additional tools to enable for the task.
             experimental_features: Experimental features to enable for the task.
 
         Returns:
@@ -806,6 +811,7 @@ class SmoothClient(BaseClient):
             proxy_password=proxy_password,
             certificates=_process_certificates(certificates),
             use_adblock=use_adblock,
+            additional_tools=additional_tools,
             experimental_features=experimental_features,
         )
         initial_response = self._submit_task(payload)
@@ -1151,6 +1157,7 @@ class SmoothAsyncClient(BaseClient):
         proxy_password: str | None = None,
         certificates: list[Certificate] | None = None,
         use_adblock: bool | None = True,
+        additional_tools: dict[str, Any] | None = None,
         experimental_features: dict[str, Any] | None = None,
     ) -> AsyncTaskHandle:
         """Runs a task and returns a handle to the task asynchronously.
@@ -1182,6 +1189,7 @@ class SmoothAsyncClient(BaseClient):
               - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
               - `password` (optional): Password to decrypt the certificate file.
             use_adblock: Enable adblock for the browser session. Default is True.
+            additional_tools: Additional tools to enable for the task.
             experimental_features: Experimental features to enable for the task.
 
         Returns:
@@ -1211,6 +1219,7 @@ class SmoothAsyncClient(BaseClient):
             proxy_password=proxy_password,
             certificates=_process_certificates(certificates),
             use_adblock=use_adblock,
+            additional_tools=additional_tools,
             experimental_features=experimental_features,
         )
 
