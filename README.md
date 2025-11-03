@@ -18,12 +18,6 @@ You can install the Smooth Python SDK using pip:
 pip install smooth-py
 ```
 
-For MCP server functionality, also install FastMCP:
-
-```bash
-pip install fastmcp
-```
-
 ## Quick Start Options
 
 ### Option 1: Direct SDK Usage
