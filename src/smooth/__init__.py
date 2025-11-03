@@ -208,7 +208,7 @@ class TaskRequest(BaseModel):
         default=True,
         description="Enable adblock for the browser session. Default is True.",
     )
-    additional_tools: dict[str, Any] | None = Field(
+    additional_tools: dict[str, dict[str, Any] | None] | None = Field(
         default=None, description="Additional tools to enable for the task."
     )
     experimental_features: dict[str, Any] | None = Field(
@@ -749,7 +749,7 @@ class SmoothClient(BaseClient):
         proxy_password: str | None = None,
         certificates: list[Certificate] | None = None,
         use_adblock: bool | None = True,
-        additional_tools: dict[str, Any] | None = None,
+        additional_tools: dict[str, dict[str, Any] | None] | None = None,
         experimental_features: dict[str, Any] | None = None,
     ) -> TaskHandle:
         """Runs a task and returns a handle to the task.
@@ -1157,7 +1157,7 @@ class SmoothAsyncClient(BaseClient):
         proxy_password: str | None = None,
         certificates: list[Certificate] | None = None,
         use_adblock: bool | None = True,
-        additional_tools: dict[str, Any] | None = None,
+        additional_tools: dict[str, dict[str, Any] | None] | None = None,
         experimental_features: dict[str, Any] | None = None,
     ) -> AsyncTaskHandle:
         """Runs a task and returns a handle to the task asynchronously.
