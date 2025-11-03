@@ -88,3 +88,6 @@ db.sqlite3-journal
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# typescript
+node_modules/
