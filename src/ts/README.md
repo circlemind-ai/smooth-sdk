@@ -13,7 +13,7 @@ The Smooth Typescript SDK provides a convenient way to interact with the Smooth 
 You can install the Smooth Typescript SDK as follows:
 
 ```bash
-npm i smooth-ts
+npm installl @circlemind-ai/smooth-ts
 ```
 
 ## Usage
