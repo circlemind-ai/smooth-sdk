@@ -155,6 +155,9 @@ interface BrowserSessionRequestPayload {
   live_view?: boolean | null;
   device?: DeviceType | null;
   url?: string | null;
+  proxy_server?: string | null;
+  proxy_username?: string | null;
+  proxy_password?: string | null;
 }
 
 /**
@@ -176,6 +179,18 @@ export interface OpenSessionOptions {
    * The URL to open in the browser session.
    */
   url?: string | null;
+  /**
+   * Proxy server url to route browser traffic through. Must include the protocol to use (e.g. http:// or https://).
+   */
+  proxy_server?: string | null;
+  /**
+   * Proxy server username.
+   */
+  proxy_username?: string | null;
+  /**
+   * Proxy server password.
+   */
+  proxy_password?: string | null;
 }
 
 export interface BrowserSessionResponse {
@@ -649,6 +664,9 @@ export class SmoothClient {
       live_view: options.live_view ?? true,
       device: options.device ?? 'desktop',
       url: options.url,
+      proxy_server: options.proxy_server,
+      proxy_username: options.proxy_username,
+      proxy_password: options.proxy_password,
     };
 
     const response = await this._request<BrowserSessionResponse>('post', '/browser/session', payload);
