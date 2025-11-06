@@ -186,7 +186,7 @@ class TaskRequest(BaseModel):
     proxy_server: str | None = Field(
         default=None,
         description=(
-            "Proxy server url to route browser traffic through. Must include the protocol to use (e.g. http:// or https://)"
+            "Proxy server url to route browser traffic through."
         ),
     )
     proxy_username: str | None = Field(
@@ -277,6 +277,18 @@ class BrowserSessionRequest(BaseModel):
     )
     url: str | None = Field(
         default=None, description="The URL to open in the browser session."
+    )
+    proxy_server: str | None = Field(
+        default=None,
+        description=(
+            "Proxy server address to route browser traffic through."
+        ),
+    )
+    proxy_username: str | None = Field(
+        default=None, description="Proxy server username."
+    )
+    proxy_password: str | None = Field(
+        default=None, description="Proxy server password."
     )
 
     @model_validator(mode="before")
@@ -773,7 +785,7 @@ class SmoothClient(BaseClient):
             profile_id: Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials.
             profile_read_only: If true, the profile specified by `profile_id` will be loaded in read-only mode.
             stealth_mode: Run the browser in stealth mode.
-            proxy_server: Proxy server url to route browser traffic through.
+            proxy_server: Proxy server address to route browser traffic through.
             proxy_username: Proxy server username.
             proxy_password: Proxy server password.
             certificates: List of client certificates to use when accessing secure websites.
@@ -825,6 +837,9 @@ class SmoothClient(BaseClient):
         live_view: bool = True,
         device: Literal["desktop", "mobile"] = "desktop",
         url: str | None = None,
+        proxy_server: str | None = None,
+        proxy_username: str | None = None,
+        proxy_password: str | None = None,
     ) -> BrowserSessionHandle:
         """Opens an interactive browser instance to interact with a specific browser profile.
 
@@ -834,6 +849,9 @@ class SmoothClient(BaseClient):
             live_view: Whether to enable live view for the session.
             device: The device type to use for the browser session.
             url: The URL to open in the browser session.
+            proxy_server: Proxy server address to route browser traffic through.
+            proxy_username: Proxy server username.
+            proxy_password: Proxy server password.
 
         Returns:
             The browser session details, including the live URL.
@@ -849,6 +867,9 @@ class SmoothClient(BaseClient):
                     live_view=live_view,
                     device=device,
                     url=url,
+                    proxy_server=proxy_server,
+                    proxy_username=proxy_username,
+                    proxy_password=proxy_password,
                 ).model_dump(),
             )
             data = self._handle_response(response)
@@ -1181,7 +1202,7 @@ class SmoothAsyncClient(BaseClient):
             profile_id: Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials.
             profile_read_only: If true, the profile specified by `profile_id` will be loaded in read-only mode.
             stealth_mode: Run the browser in stealth mode.
-            proxy_server: Proxy server url to route browser traffic through.
+            proxy_server: Proxy server address to route browser traffic through.
             proxy_username: Proxy server username.
             proxy_password: Proxy server password.
             certificates: List of client certificates to use when accessing secure websites.
@@ -1233,6 +1254,9 @@ class SmoothAsyncClient(BaseClient):
         live_view: bool = True,
         device: Literal["desktop", "mobile"] = "desktop",
         url: str | None = None,
+        proxy_server: str | None = None,
+        proxy_username: str | None = None,
+        proxy_password: str | None = None,
     ) -> BrowserSessionHandle:
         """Opens an interactive browser instance asynchronously.
 
@@ -1242,6 +1266,9 @@ class SmoothAsyncClient(BaseClient):
             live_view: Whether to enable live view for the session.
             device: The device type to use for the session. Defaults to "desktop".
             url: The URL to open in the browser session.
+            proxy_server: Proxy server address to route browser traffic through.
+            proxy_username: Proxy server username.
+            proxy_password: Proxy server password.
 
         Returns:
             The browser session details, including the live URL.
@@ -1257,6 +1284,9 @@ class SmoothAsyncClient(BaseClient):
                     live_view=live_view,
                     device=device,
                     url=url,
+                    proxy_server=proxy_server,
+                    proxy_username=proxy_username,
+                    proxy_password=proxy_password,
                 ).model_dump(),
             )
             data = self._handle_response(response)
