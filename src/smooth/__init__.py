@@ -214,6 +214,9 @@ class TaskRequest(BaseModel):
     experimental_features: dict[str, Any] | None = Field(
         default=None, description="Experimental features to enable for the task."
     )
+    extensions: list[str] | None = Field(
+        default=None, description="List of extensions to install for the task."
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -445,6 +448,32 @@ class UploadFileResponse(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     id: str = Field(description="The ID assigned to the uploaded file.")
+
+
+class UploadExtensionResponse(BaseModel):
+    """Response model for uploading an extension."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(description="The uploaded extension ID.")
+
+
+class Extension(BaseModel):
+    """Extension model."""
+
+    model_config = ConfigDict(extra="allow")
+
+    id: str = Field(description="The ID of the extension.")
+    file_name: str = Field(description="The name of the extension.")
+    creation_time: int = Field(description="The creation timestamp.")
+
+
+class ListExtensionsResponse(BaseModel):
+    """Response model for listing extensions."""
+
+    model_config = ConfigDict(extra="allow")
+
+    extensions: list[Extension] = Field(description="The list of extensions.")
 
 
 # --- Exception Handling ---
@@ -763,6 +792,7 @@ class SmoothClient(BaseClient):
         use_adblock: bool | None = True,
         additional_tools: dict[str, dict[str, Any] | None] | None = None,
         experimental_features: dict[str, Any] | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskHandle:
         """Runs a task and returns a handle to the task.
 
@@ -825,6 +855,7 @@ class SmoothClient(BaseClient):
             use_adblock=use_adblock,
             additional_tools=additional_tools,
             experimental_features=experimental_features,
+            extensions=extensions,
         )
         initial_response = self._submit_task(payload)
 
@@ -977,6 +1008,40 @@ class SmoothClient(BaseClient):
             logger.error(f"Request failed: {e}")
             raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+    def upload_extension(self, file: io.IOBase, name: str | None = None) -> UploadExtensionResponse:
+        """Upload an extension and return the extension ID."""
+        try:
+            name = name or getattr(file, "name", None)
+            if name is None:
+                raise ValueError(
+                    "Extension name must be provided or the extension object must have a 'name' attribute."
+                )
+            files = {"file": (Path(name).name, file)}
+            response = self._session.post(f"{self.base_url}/browser/extension", files=files)
+            data = self._handle_response(response)
+            return UploadExtensionResponse(**data["r"])
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed: {e}")
+            raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+    def list_extensions(self) -> ListExtensionsResponse:
+        """List all extensions."""
+        try:
+            response = self._session.get(f"{self.base_url}/browser/extension")
+            data = self._handle_response(response)
+            return ListExtensionsResponse(**data["r"])
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed: {e}")
+            raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+    def delete_extension(self, extension_id: str):
+        """Delete an extension by its ID."""
+        try:
+            response = self._session.delete(f"{self.base_url}/browser/extension/{extension_id}")
+            self._handle_response(response)
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request failed: {e}")
+            raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
 # --- Asynchronous Client ---
 
@@ -1394,6 +1459,41 @@ class SmoothAsyncClient(BaseClient):
             logger.error(f"Request failed: {e}")
             raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+    async def upload_extension(self, file: io.IOBase, name: str | None = None) -> UploadExtensionResponse:
+        """Upload an extension and return the extension ID."""
+        try:
+            name = name or getattr(file, "name", None)
+            if name is None:
+                raise ValueError(
+                    "File name must be provided or the file object must have a 'name' attribute."
+                )
+            files = {"file": (Path(name).name, file)}
+            response = await self._client.post(f"{self.base_url}/browser/extension", files=files)
+            data = self._handle_response(response)
+            return UploadExtensionResponse(**data["r"])
+        except httpx.RequestError as e:
+            logger.error(f"Request failed: {e}")
+            raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+    async def list_extensions(self) -> ListExtensionsResponse:
+        """List all extensions."""
+        try:
+            response = await self._client.get(f"{self.base_url}/browser/extension")
+            data = self._handle_response(response)
+            return ListExtensionsResponse(**data["r"])
+        except httpx.RequestError as e:
+            logger.error(f"Request failed: {e}")
+            raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+    async def delete_extension(self, extension_id: str):
+        """Delete an extension by its ID."""
+        try:
+            response = await self._client.delete(f"{self.base_url}/browser/extension/{extension_id}")
+            self._handle_response(response)
+        except httpx.RequestError as e:
+            logger.error(f"Request failed: {e}")
+            raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
     async def close(self):
         """Closes the async client session."""
         await self._client.aclose()
@@ -1412,6 +1512,9 @@ __all__ = [
     "BrowserSessionResponse",
     "BrowserSessionsResponse",
     "UploadFileResponse",
+    "UploadExtensionResponse",
+    "ListExtensionsResponse",
+    "Extension",
     "Certificate",
     "ApiError",
     "TimeoutError",
