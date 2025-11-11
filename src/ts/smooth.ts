@@ -103,6 +103,7 @@ interface TaskRequestPayload {
   use_adblock?: boolean | null;
   additional_tools?: Record<string, Record<string, any> | null> | null;
   experimental_features?: Record<string, any> | null;
+  extensions?: string[] | null;
 }
 
 /**
@@ -143,6 +144,10 @@ export interface RunTaskOptions {
    */
   additional_tools?: Record<string, Record<string, any> | null> | null;
   experimental_features?: Record<string, any> | null;
+  /**
+   * List of extension IDs to install for the task.
+   */
+  extensions?: string[] | null;
 }
 
 /**
@@ -206,6 +211,20 @@ export interface BrowserProfilesResponse {
 
 export interface UploadFileResponse {
   id: string;
+}
+
+export interface UploadExtensionResponse {
+  id: string;
+}
+
+export interface Extension {
+  id: string;
+  file_name: string;
+  creation_time: number;
+}
+
+export interface ListExtensionsResponse {
+  extensions: Extension[];
 }
 
 /**
@@ -640,6 +659,7 @@ export class SmoothClient {
       use_adblock: options.use_adblock ?? true,
       additional_tools: options.additional_tools,
       experimental_features: options.experimental_features,
+      extensions: options.extensions,
     };
 
     const initialResponse = await this._submit_task(payload);
@@ -766,6 +786,54 @@ export class SmoothClient {
    */
   public async delete_file(file_id: string): Promise<void> {
     await this._request<void>('delete', `/file/${file_id}`);
+  }
+
+  /**
+   * Uploads an extension package (CRX/ZIP) and returns the extension ID.
+   * @param file The extension file content as a Buffer or Readable stream.
+   * @param name The file name for the extension.
+   */
+  public async upload_extension(file: Buffer | Readable, name: string): Promise<UploadExtensionResponse> {
+    if (!name) {
+      throw new ValueError('Extension file name must be provided.');
+    }
+
+    const form = new FormData();
+    form.append('file', file, name);
+
+    try {
+      const response = await this.axios_instance.post<ApiResponse<UploadExtensionResponse>>(
+        '/browser/extension',
+        form,
+        { headers: form.getHeaders() }
+      );
+      return response.data.r;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        const axiosError = error as AxiosError<any>;
+        const status = axiosError.response?.status ?? 0;
+        const detail = axiosError.response?.data?.detail ?? axiosError.message;
+        const responseData = axiosError.response?.data ?? null;
+        throw new ApiError(status, detail, responseData);
+      }
+      throw new ApiError(0, (error as Error).message);
+    }
+  }
+
+  /**
+   * Lists all uploaded extensions for the user.
+   */
+  public async list_extensions(): Promise<ListExtensionsResponse> {
+    const response = await this._request<ListExtensionsResponse>('get', '/browser/extension');
+    return response;
+  }
+
+  /**
+   * Deletes an extension by its ID.
+   * @param extension_id The ID of the extension to delete.
+   */
+  public async delete_extension(extension_id: string): Promise<void> {
+    await this._request<void>('delete', `/browser/extension/${extension_id}`);
   }
 
   /**
