@@ -10,10 +10,12 @@ class SmoothTool:
     self,
     signature: ToolSignature,
     fn: Callable[..., Any],
+    essential: bool,
     error_message: str | None = None,
   ) -> None:
     self.signature = signature
     self._fn = fn
+    self._essential = essential
     self._error_message = error_message
 
   @property
@@ -25,7 +27,7 @@ class SmoothTool:
       response = self._fn(**kwargs)
       response_json = json.dumps(response)
       if len(response_json) > 64_000:
-        raise ValueError(self.signature.name, "Tool response too large to send back (max ~64KB).")
+        raise ValueError(self.signature.name, "Tool response exceeds size limit (max ~64KB).")
       task.update(
         TaskUpdateRequest(
           tool_response=ToolCallResponse(
@@ -38,8 +40,13 @@ class SmoothTool:
     except ToolCallError as e:
       task.update(TaskUpdateRequest(tool_response=ToolCallResponse(id=call_id, code=400, output=str(e))))
     except Exception as e:
-      task.update(TaskUpdateRequest(tool_response=ToolCallResponse(id=call_id, code=500, output=self._error_message or "")))
-      raise e
+      task.update(
+        TaskUpdateRequest(
+          tool_response=ToolCallResponse(id=call_id, code=500 if self._essential else 400, output=self._error_message or str(e))
+        )
+      )
+      if self._essential:
+        raise e
 
 
 class AsyncSmoothTool:
@@ -47,10 +54,12 @@ class AsyncSmoothTool:
     self,
     signature: ToolSignature,
     fn: Callable[..., Any],
+    essential: bool,
     error_message: str | None = None,
   ) -> None:
     self.signature = signature
     self._fn = fn
+    self._essential = essential
     self._error_message = error_message
 
   @property
@@ -64,7 +73,7 @@ class AsyncSmoothTool:
         response = await response
       response_json = json.dumps(response)
       if len(response_json) > 64_000:
-        raise ValueError(self.signature.name, "Tool response too large to send back (max ~64KB).")
+        raise ValueError(self.signature.name, "Tool response exceeds size limit (max ~64KB).")
       await task.update(
         TaskUpdateRequest(
           tool_response=ToolCallResponse(
@@ -78,6 +87,9 @@ class AsyncSmoothTool:
       await task.update(TaskUpdateRequest(tool_response=ToolCallResponse(id=call_id, code=400, output=str(e))))
     except Exception as e:
       await task.update(
-        TaskUpdateRequest(tool_response=ToolCallResponse(id=call_id, code=500, output=self._error_message or ""))
+        TaskUpdateRequest(
+          tool_response=ToolCallResponse(id=call_id, code=500 if self._essential else 400, output=self._error_message or str(e))
+        )
       )
-      raise e
+      if self._essential:
+        raise e

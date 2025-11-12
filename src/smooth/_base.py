@@ -54,7 +54,7 @@ class ToolCall(BaseModel):
   input: str | None = Field(default=None, description="The input provided to the tool (json encoded).")
 
   # Response params
-  code: str | None = Field(default=None, description="The tool call returned HTTP status code.")
+  code: int | None = Field(default=None, description="The tool call returned HTTP status code.")
   output: str | None = Field(default=None, description="The output produced by the tool (json encoded).")
 
 
