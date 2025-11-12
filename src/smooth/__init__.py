@@ -35,7 +35,7 @@ from ._base import (
   UploadExtensionResponse,
   UploadFileResponse,
 )
-from ._tools import AsyncSmoothTool, SmoothTool
+from ._tools import AsyncSmoothTool, SmoothTool, ToolCallError
 from ._utils import encode_url
 
 # Configure logging
@@ -120,6 +120,10 @@ class TaskHandle(BaseTaskHandle):
   def stop(self):
     """Stops the task."""
     self._client._delete_task(self._id)
+
+  def update(self, payload: TaskUpdateRequest) -> bool:
+    """Updates a running task with user input."""
+    return self._client._update_task(self._id, payload)
 
   def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
@@ -378,14 +382,25 @@ class SmoothClient(BaseClient):
 
     return TaskHandle(initial_response.id, self, tools=custom_tools)
 
-  def tool(self, name: str, description: str, inputs: dict[str, Any], output: str):
+  def tool(
+    self,
+    name: str,
+    description: str,
+    inputs: dict[str, Any],
+    output: str,
+    essential: bool = True,
+    error_message: str | None = None,
+  ):
     """Decorator to register an asynchronous tool function."""
 
     def decorator(func: Any):
-      async_tool = SmoothTool(
-        signature=ToolSignature(name=name, description=description, inputs=inputs, output=output), fn=func
+      tool = SmoothTool(
+        signature=ToolSignature(name=name, description=description, inputs=inputs, output=output),
+        fn=func,
+        essential=essential,
+        error_message=error_message,
       )
-      return async_tool
+      return tool
 
     return decorator
 
@@ -833,11 +848,24 @@ class SmoothAsyncClient(BaseClient):
     initial_response = await self._submit_task(payload)
     return AsyncTaskHandle(initial_response.id, self, tools=custom_tools)
 
-  def tool(self, name: str, description: str, inputs: dict[str, Any], output: str):
+  def tool(
+    self,
+    name: str,
+    description: str,
+    inputs: dict[str, Any],
+    output: str,
+    essential: bool = True,
+    error_message: str | None = None,
+  ):
     """Decorator to register an asynchronous tool function."""
 
     def decorator(func: Any):
-      async_tool = AsyncSmoothTool(ToolSignature(name=name, description=description, inputs=inputs, output=output), fn=func)
+      async_tool = AsyncSmoothTool(
+        signature=ToolSignature(name=name, description=description, inputs=inputs, output=output),
+        fn=func,
+        essential=essential,
+        error_message=error_message,
+      )
       return async_tool
 
     return decorator
@@ -1034,4 +1062,5 @@ __all__ = [
   "Certificate",
   "ApiError",
   "TimeoutError",
+  "ToolCallError",
 ]
