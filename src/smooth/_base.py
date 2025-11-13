@@ -1,11 +1,10 @@
 # pyright: reportPrivateUsage=false
 """Smooth python SDK types and models."""
 
-import io
 import logging
 import os
 import warnings
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal
 
 import httpx
 import requests
@@ -20,7 +19,7 @@ BASE_URL = "https://api.smooth.sh/api/"
 # --- Models ---
 
 
-class Certificate(TypedDict):
+class Certificate(BaseModel):
   """Client certificate for accessing secure websites.
 
   Attributes:
@@ -28,21 +27,26 @@ class Certificate(TypedDict):
       password: Password to decrypt the certificate file. Optional.
   """
 
-  file: str | io.IOBase  # Required - base64 string or binary IO
-  password: NotRequired[str]  # Optional
-  filters: NotRequired[
-    list[str]
-  ]  # Optional - TODO: Reserved for future use to specify URL patterns where the certificate should be applied.
+  file: str | Any  = Field(
+    description="p12 file object to be uploaded (e.g., open('cert.p12', 'rb'))."
+  )
+  password: str | None = Field(
+    default=None,
+    description="Password to decrypt the certificate file. Optional."
+  )
+  filters: list[list[str]] | None = Field(
+    default=None,
+    description="Reserved for future use to specify URL patterns where the certificate should be applied. Optional."
+  )
 
 
 class ToolSignature(BaseModel):
   """Tool signature model."""
 
   name: str = Field(description="The name of the tool.")
-  description: str = Field(description="The description of the tool.")
-  inputs: dict[str, Any] = Field(description="The input schema of the tool.")
-  output: str = Field(description="The output schema of the tool.")
-
+  description: str = Field(description="A brief description of the tool.")
+  inputs: dict[str, Any] = Field(description="The input parameters for the tool.")
+  output: str = Field(description="The output produced by the tool.")
 
 class ToolCall(BaseModel):
   """Tool call model."""
@@ -88,7 +92,7 @@ class TaskResponse(BaseModel):
     description="The URL of the archive containing the downloaded files.",
   )
   created_at: int | None = Field(default=None, description="The timestamp when the task was created.")
-  tool_calls: dict[str, ToolCall] | None = Field(default=None, description="TODO")
+  tool_calls: dict[str, ToolCall] | None = Field(default=None, description="Contains a list of pending tool calls.")
 
 
 class TaskRequest(BaseModel):
@@ -146,7 +150,7 @@ class TaskRequest(BaseModel):
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: str | None = Field(default=None, description="Proxy server password.")
-  certificates: list[dict[str, Any]] | None = Field(
+  certificates: list[Certificate] | None = Field(
     default=None,
     description=(
       "List of client certificates to use when accessing secure websites. "
