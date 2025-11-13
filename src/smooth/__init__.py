@@ -50,7 +50,7 @@ BASE_URL = "https://api.smooth.sh/api/"
 
 def _process_certificates(
   certificates: list[Certificate] | None,
-) -> list[dict[str, Any]] | None:
+) -> list[Certificate] | None:
   """Process certificates, converting binary IO to base64-encoded strings.
 
   Args:
@@ -62,15 +62,15 @@ def _process_certificates(
   if certificates is None:
     return None
 
-  processed_certs: list[dict[str, Any]] = []
+  processed_certs: list[Certificate] = []
   for cert in certificates:
-    processed_cert = dict(cert)  # Create a copy
+    processed_cert = cert.model_copy() # Create a copy
 
-    file_content = processed_cert["file"]
+    file_content = processed_cert.file
     if isinstance(file_content, io.IOBase):
       # Read the binary content and encode to base64
       binary_data = file_content.read()
-      processed_cert["file"] = base64.b64encode(binary_data).decode("utf-8")
+      processed_cert.file = base64.b64encode(binary_data).decode("utf-8")
     elif not isinstance(file_content, str):
       raise TypeError(f"Certificate file must be a string or binary IO, got {type(file_content)}")
 
