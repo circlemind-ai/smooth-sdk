@@ -49,7 +49,7 @@ BASE_URL = "https://api.smooth.sh/api/"
 
 
 def _process_certificates(
-  certificates: list[Certificate] | None,
+  certificates: list[Certificate | dict[str, Any]] | None,
 ) -> list[Certificate] | None:
   """Process certificates, converting binary IO to base64-encoded strings.
 
@@ -64,7 +64,7 @@ def _process_certificates(
 
   processed_certs: list[Certificate] = []
   for cert in certificates:
-    processed_cert = cert.model_copy() # Create a copy
+    processed_cert = Certificate(**cert) if isinstance(cert, dict) else cert.model_copy()  # Create a copy
 
     file_content = processed_cert.file
     if isinstance(file_content, io.IOBase):
@@ -307,10 +307,10 @@ class SmoothClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
-    certificates: list[Certificate] | None = None,
+    certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
-    custom_tools: list[SmoothTool] | None = None,
+    custom_tools: list[SmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
   ) -> TaskHandle:
@@ -354,6 +354,10 @@ class SmoothClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
+    certificates_ = _process_certificates(certificates)
+    custom_tools_ = (
+      [tool if isinstance(tool, SmoothTool) else SmoothTool(**tool) for tool in custom_tools] if custom_tools else None
+    )
     payload = TaskRequest(
       task=task,
       response_model=response_model if isinstance(response_model, dict | None) else response_model.model_json_schema(),
@@ -371,16 +375,16 @@ class SmoothClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
-      certificates=_process_certificates(certificates),
+      certificates=certificates_,
       use_adblock=use_adblock,
       additional_tools=additional_tools,
-      custom_tools=[tool.signature for tool in custom_tools] if custom_tools else None,
+      custom_tools=[tool.signature for tool in custom_tools_] if custom_tools_ else None,
       experimental_features=experimental_features,
       extensions=extensions,
     )
     initial_response = self._submit_task(payload)
 
-    return TaskHandle(initial_response.id, self, tools=custom_tools)
+    return TaskHandle(initial_response.id, self, tools=custom_tools_)
 
   def tool(
     self,
@@ -776,10 +780,10 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
-    certificates: list[Certificate] | None = None,
+    certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
-    custom_tools: list[AsyncSmoothTool] | None = None,
+    custom_tools: list[AsyncSmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
@@ -821,6 +825,13 @@ class SmoothAsyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
+    certificates_ = _process_certificates(certificates)
+    custom_tools_ = (
+      [tool if isinstance(tool, AsyncSmoothTool) else AsyncSmoothTool(**tool) for tool in custom_tools]
+      if custom_tools
+      else None
+    )
+
     payload = TaskRequest(
       task=task,
       response_model=response_model if isinstance(response_model, dict | None) else response_model.model_json_schema(),
@@ -838,15 +849,15 @@ class SmoothAsyncClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
-      certificates=_process_certificates(certificates),
+      certificates=certificates_,
       use_adblock=use_adblock,
       additional_tools=additional_tools,
-      custom_tools=[tool.signature for tool in custom_tools] if custom_tools else None,
+      custom_tools=[tool.signature for tool in custom_tools_] if custom_tools_ else None,
       experimental_features=experimental_features,
     )
 
     initial_response = await self._submit_task(payload)
-    return AsyncTaskHandle(initial_response.id, self, tools=custom_tools)
+    return AsyncTaskHandle(initial_response.id, self, tools=custom_tools_)
 
   def tool(
     self,
