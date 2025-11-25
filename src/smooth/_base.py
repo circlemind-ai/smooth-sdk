@@ -245,6 +245,7 @@ class BrowserSessionRequest(BaseModel):
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: str | None = Field(default=None, description="Proxy server password.")
+  extensions: list[str] | None = Field(default=None, description="List of extensions to install for the task.")
 
   @model_validator(mode="before")
   @classmethod

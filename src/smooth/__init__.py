@@ -418,6 +418,7 @@ class SmoothClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    extensions: list[str] | None = None,
   ) -> BrowserSessionHandle:
     """Opens an interactive browser instance to interact with a specific browser profile.
 
@@ -430,6 +431,7 @@ class SmoothClient(BaseClient):
         proxy_server: Proxy server address to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
+        extensions: List of extensions to install for the browser session.
 
     Returns:
         The browser session details, including the live URL.
@@ -448,6 +450,7 @@ class SmoothClient(BaseClient):
           proxy_server=proxy_server,
           proxy_username=proxy_username,
           proxy_password=proxy_password,
+          extensions=extensions,
         ).model_dump(),
       )
       data = self._handle_response(response)
@@ -891,6 +894,7 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    extensions: list[str] | None = None,
   ) -> BrowserSessionHandle:
     """Opens an interactive browser instance asynchronously.
 
@@ -903,6 +907,7 @@ class SmoothAsyncClient(BaseClient):
         proxy_server: Proxy server address to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
+        extensions: List of extensions to install for the browser session.
 
     Returns:
         The browser session details, including the live URL.
@@ -921,6 +926,7 @@ class SmoothAsyncClient(BaseClient):
           proxy_server=proxy_server,
           proxy_username=proxy_username,
           proxy_password=proxy_password,
+          extensions=extensions,
         ).model_dump(),
       )
       data = self._handle_response(response)
