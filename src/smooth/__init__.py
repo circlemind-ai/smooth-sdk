@@ -7,7 +7,6 @@ import io
 import logging
 import time
 from pathlib import Path
-from types import CoroutineType
 from typing import Any, Literal, Type, cast
 
 import httpx
@@ -130,7 +129,6 @@ class TaskHandle(BaseTaskHandle):
     """Updates a running task with user input."""
     return self._client._update_task(self._id, payload)
 
-
   def send_event(self, event: TaskEvent, has_result: bool = False, timeout: int = 60) -> Any | None:
     """Sends an event to a running task."""
     event_id = self._client._send_task_event(self._id, event).id
@@ -139,7 +137,7 @@ class TaskHandle(BaseTaskHandle):
       while True:
         task_response = self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
         if task_response.events:
-          for e in (task_response.events or []):
+          for e in task_response.events or []:
             if e.name == "browser_action" and e.id == event_id:
               code = e.payload.get("code")
               if code == 200:
@@ -188,11 +186,9 @@ class TaskHandle(BaseTaskHandle):
         return task_response
       if task_response.events:
         self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
-        for event in (task_response.events or []):
+        for event in task_response.events or []:
           if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
-            tool(
-              self, event.id, **event.payload.get("input", {})
-            )
+            tool(self, event.id, **event.payload.get("input", {}))
       time.sleep(poll_interval)
     raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
 
@@ -666,7 +662,7 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
     """Sends an event to a running task."""
     event_id = (await self._client._send_task_event(self._id, event)).id
     if has_result:
-      future = asyncio.get_event_loop().create_future()
+      future = asyncio.get_running_loop().create_future()
       self._event_futures[event_id] = future
 
       return future
@@ -707,12 +703,9 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
         return task_response
       if task_response.events:
         self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
-        tasks: list[CoroutineType[Any, Any, Any]] = []
         for event in task_response.events:
           if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
-            tasks.append(tool(
-              self, event.id, **event.payload.get("input", {})
-            ))
+            asyncio.run_coroutine_threadsafe(tool(self, event.id, **event.payload.get("input", {})), asyncio.get_running_loop())
           elif event.name == "browser_action":
             future = self._event_futures.get(event.id)
             if future and not future.done():
@@ -724,7 +717,6 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
                 future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
               elif code == 500:
                 future.set_exception(ValueError(event.payload.get("output", "Unknown error.")))
-        await asyncio.gather(*tasks)
 
       await asyncio.sleep(poll_interval)
     raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
