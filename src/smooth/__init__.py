@@ -8,7 +8,7 @@ import logging
 import time
 from pathlib import Path
 from types import CoroutineType
-from typing import Any, Literal, Type
+from typing import Any, Literal, Type, cast
 
 import httpx
 import requests
@@ -153,7 +153,7 @@ class TaskHandle(BaseTaskHandle):
         time.sleep(1)
     return None
 
-  def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any | None:
+  def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any:
     """Executes JavaScript code in the browser context."""
     event = TaskEvent(
       name="browser_action",
@@ -672,7 +672,7 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
       return future
     return None
 
-  async def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any | None:
+  async def exec_js(self, code: str, args: dict[str, Any] | None = None) -> asyncio.Future[Any]:
     """Executes JavaScript code in the browser context."""
     event = TaskEvent(
       name="browser_action",
@@ -684,7 +684,7 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
         },
       },
     )
-    return await self.send_event(event, has_result=True)
+    return cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
 
   async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
