@@ -1,6 +1,7 @@
 # pyright: reportPrivateUsage=false
 """Smooth python SDK types and models."""
 
+import asyncio
 import logging
 import os
 import warnings
@@ -540,7 +541,7 @@ class BaseTaskHandle:
   def stop(self) -> None:
     raise NotImplementedError
 
-  def send_event(self, event: TaskEvent) -> TaskEventResponse:
+  def send_event(self, event: TaskEvent) -> Any | None:
     raise NotImplementedError
 
   def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
@@ -566,7 +567,7 @@ class BaseAsyncTaskHandle(BaseTaskHandle):
   async def stop(self) -> None:
     raise NotImplementedError
 
-  async def send_event(self, event: TaskEvent) -> TaskEventResponse:
+  async def send_event(self, event: TaskEvent) -> asyncio.Future[Any] | None:
     raise NotImplementedError
 
   async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
