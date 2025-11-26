@@ -4,10 +4,10 @@
 import asyncio
 import base64
 import io
-import json
 import logging
 import time
 from pathlib import Path
+from types import CoroutineType
 from typing import Any, Literal, Type
 
 import httpx
@@ -27,10 +27,13 @@ from ._base import (
   Certificate,
   Extension,
   ListExtensionsResponse,
+  TaskEvent,
+  TaskEventResponse,
   TaskRequest,
   TaskResponse,
   TaskUpdateRequest,
   TimeoutError,
+  ToolCall,
   ToolSignature,
   UploadExtensionResponse,
   UploadFileResponse,
@@ -112,6 +115,7 @@ class TaskHandle(BaseTaskHandle):
     super().__init__(task_id)
     self._client = client
     self._tools = {tool.name: tool for tool in (tools or [])}
+    self._last_event_t = 0
 
   def id(self):
     """Returns the task ID."""
@@ -121,9 +125,47 @@ class TaskHandle(BaseTaskHandle):
     """Stops the task."""
     self._client._delete_task(self._id)
 
+  @deprecated("update is deprecated, use send_event instead")
   def update(self, payload: TaskUpdateRequest) -> bool:
     """Updates a running task with user input."""
     return self._client._update_task(self._id, payload)
+
+
+  def send_event(self, event: TaskEvent, has_result: bool = False, timeout: int = 60) -> Any | None:
+    """Sends an event to a running task."""
+    event_id = self._client._send_task_event(self._id, event).id
+    if has_result:
+      time_now = time.time()
+      while True:
+        task_response = self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
+        if task_response.events:
+          for e in (task_response.events or []):
+            if e.name == "browser_action" and e.id == event_id:
+              code = e.payload.get("code")
+              if code == 200:
+                return e.payload.get("output")
+              elif code == 400:
+                raise ToolCallError(e.payload.get("output", "Unknown error."))
+              elif code == 500:
+                raise ValueError(e.payload.get("output", "Unknown error."))
+        if (time.time() - time_now) >= timeout:
+          raise TimeoutError(f"[{event.name}] Execution timeout.")
+        time.sleep(1)
+    return None
+
+  def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any | None:
+    """Executes JavaScript code in the browser context."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "exec_js",
+        "input": {
+          "js": code,
+          "args": args,
+        },
+      },
+    )
+    return self.send_event(event, has_result=True)
 
   def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
@@ -140,15 +182,16 @@ class TaskHandle(BaseTaskHandle):
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id())
+      task_response = self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
       self._task_response = task_response
       if task_response.status not in ["running", "waiting"]:
         return task_response
-      if task_response.tool_calls:
-        for id, tool_call_request in task_response.tool_calls.items():
-          if tool_call_request.name:
-            self._tools[tool_call_request.name](
-              self, id, **json.loads(tool_call_request.input) if tool_call_request.input else {}
+      if task_response.events:
+        self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
+        for event in (task_response.events or []):
+          if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
+            tool(
+              self, event.id, **event.payload.get("input", {})
             )
       time.sleep(poll_interval)
     raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
@@ -272,6 +315,22 @@ class SmoothClient(BaseClient):
       response = self._session.put(f"{self.base_url}/task/{task_id}", json=payload.model_dump())
       self._handle_response(response)
       return True
+    except requests.exceptions.RequestException as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  def _send_task_event(self, task_id: str, event: TaskEvent) -> TaskEventResponse:
+    """Sends an event to a running task."""
+    if not task_id:
+      raise ValueError("Task ID cannot be empty.")
+
+    try:
+      response = self._session.post(
+        f"{self.base_url}/task/{task_id}/event",
+        json=event.model_dump(),
+      )
+      data = self._handle_response(response)
+      return TaskEventResponse(**data["r"])
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
@@ -591,14 +650,41 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
     super().__init__(task_id)
     self._client = client
     self._tools = {tool.name: tool for tool in (tools or [])}
+    self._last_event_t = 0
+    self._event_futures: dict[str | None, asyncio.Future[Any]] = {}
 
   async def stop(self):
     """Stops the task."""
     await self._client._delete_task(self._id)
 
+  @deprecated("update is deprecated, use send_event instead")
   async def update(self, payload: TaskUpdateRequest) -> bool:
     """Updates a running task with user input."""
     return await self._client._update_task(self._id, payload)
+
+  async def send_event(self, event: TaskEvent, has_result: bool = False) -> asyncio.Future[Any] | None:
+    """Sends an event to a running task."""
+    event_id = (await self._client._send_task_event(self._id, event)).id
+    if has_result:
+      future = asyncio.get_event_loop().create_future()
+      self._event_futures[event_id] = future
+
+      return future
+    return None
+
+  async def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any | None:
+    """Executes JavaScript code in the browser context."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "exec_js",
+        "input": {
+          "js": code,
+          "args": args,
+        },
+      },
+    )
+    return await self.send_event(event, has_result=True)
 
   async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
     """Waits for the task to complete and returns the result."""
@@ -615,18 +701,29 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
 
     start_time = time.time()
     while timeout is None or (time.time() - start_time) < timeout:
-      task_response = await self._client._get_task(self.id())
+      task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
       self._task_response = task_response
       if task_response.status not in ["running", "waiting"]:
         return task_response
-      if task_response.tool_calls:
-        tasks = [
-          await self._tools[tool_call_request.name](
-            self, id, **json.loads(tool_call_request.input) if tool_call_request.input else {}
-          )
-          for id, tool_call_request in task_response.tool_calls.items()
-          if tool_call_request.name
-        ]
+      if task_response.events:
+        self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
+        tasks: list[CoroutineType[Any, Any, Any]] = []
+        for event in task_response.events:
+          if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
+            tasks.append(tool(
+              self, event.id, **event.payload.get("input", {})
+            ))
+          elif event.name == "browser_action":
+            future = self._event_futures.get(event.id)
+            if future and not future.done():
+              del self._event_futures[event.id]
+              code = event.payload.get("code")
+              if code == 200:
+                future.set_result(event.payload.get("output"))
+              elif code == 400:
+                future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
+              elif code == 500:
+                future.set_exception(ValueError(event.payload.get("output", "Unknown error.")))
         await asyncio.gather(*tasks)
 
       await asyncio.sleep(poll_interval)
@@ -748,6 +845,22 @@ class SmoothAsyncClient(BaseClient):
       response = await self._client.put(f"{self.base_url}/task/{task_id}", json=payload.model_dump())
       self._handle_response(response)
       return True
+    except httpx.RequestError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def _send_task_event(self, task_id: str, event: TaskEvent):
+    """Sends an event to a running task asynchronously."""
+    if not task_id:
+      raise ValueError("Task ID cannot be empty.")
+
+    try:
+      response = await self._client.post(
+        f"{self.base_url}/task/{task_id}/event",
+        json=event.model_dump(),
+      )
+      data = self._handle_response(response)
+      return TaskEventResponse(**data["r"])
     except httpx.RequestError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
@@ -1067,6 +1180,7 @@ __all__ = [
   "TaskHandle",
   "AsyncTaskHandle",
   "BrowserSessionHandle",
+  "TaskEvent",
   "TaskRequest",
   "TaskResponse",
   "BrowserSessionRequest",
@@ -1079,5 +1193,6 @@ __all__ = [
   "Certificate",
   "ApiError",
   "TimeoutError",
+  "ToolCall",
   "ToolCallError",
 ]

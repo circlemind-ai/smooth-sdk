@@ -27,16 +27,11 @@ class Certificate(BaseModel):
       password: Password to decrypt the certificate file. Optional.
   """
 
-  file: str | Any  = Field(
-    description="p12 file object to be uploaded (e.g., open('cert.p12', 'rb'))."
-  )
-  password: str | None = Field(
-    default=None,
-    description="Password to decrypt the certificate file. Optional."
-  )
+  file: str | Any = Field(description="p12 file object to be uploaded (e.g., open('cert.p12', 'rb')).")
+  password: str | None = Field(default=None, description="Password to decrypt the certificate file. Optional.")
   filters: list[list[str]] | None = Field(
     default=None,
-    description="Reserved for future use to specify URL patterns where the certificate should be applied. Optional."
+    description="Reserved for future use to specify URL patterns where the certificate should be applied. Optional.",
   )
 
 
@@ -47,6 +42,18 @@ class ToolSignature(BaseModel):
   description: str = Field(description="A brief description of the tool.")
   inputs: dict[str, Any] = Field(description="The input parameters for the tool.")
   output: str = Field(description="The output produced by the tool.")
+
+
+class TaskEvent(BaseModel):
+  name: str = Field(description="The name of the event.")
+  payload: dict[str, Any] = Field(description="The payload of the event.")
+  id: str | None = Field(default=None, description="The ID of the event.")
+  timestamp: int | None = Field(default=None, description="The timestamp of the event.")
+
+
+class TaskEventResponse(BaseModel):
+  id: str = Field(description="The ID of the event.")
+
 
 class ToolCall(BaseModel):
   """Tool call model."""
@@ -92,7 +99,10 @@ class TaskResponse(BaseModel):
     description="The URL of the archive containing the downloaded files.",
   )
   created_at: int | None = Field(default=None, description="The timestamp when the task was created.")
-  tool_calls: dict[str, ToolCall] | None = Field(default=None, description="Contains a list of pending tool calls.")
+  tool_calls: dict[str, ToolCall] | None = Field(
+    default=None, description="Contains a list of pending tool calls.", deprecated=True
+  )
+  events: list[TaskEvent] | None = Field(default=None, description="The list of new events fired.")
 
 
 class TaskRequest(BaseModel):
@@ -166,9 +176,7 @@ class TaskRequest(BaseModel):
   additional_tools: dict[str, dict[str, Any] | None] | None = Field(
     default=None, description="Additional tools to enable for the task."
   )
-  custom_tools: list[ToolSignature] | None = Field(
-    default=None, description="Custom tools to register for the task."
-  )
+  custom_tools: list[ToolSignature] | None = Field(default=None, description="Custom tools to register for the task.")
   experimental_features: dict[str, Any] | None = Field(
     default=None, description="Experimental features to enable for the task."
   )
@@ -183,8 +191,8 @@ class TaskRequest(BaseModel):
         DeprecationWarning,
         stacklevel=2,
       )
-      data["profile_id"] = data.pop("session_id")
-    return data
+      data["profile_id"] = data.pop("session_id")  # pyright: ignore[reportUnknownMemberType]
+    return data  # pyright: ignore[reportUnknownVariableType]
 
   @computed_field(return_type=str | None)
   @property
@@ -256,8 +264,8 @@ class BrowserSessionRequest(BaseModel):
         DeprecationWarning,
         stacklevel=2,
       )
-      data["profile_id"] = data.pop("session_id")
-    return data
+      data["profile_id"] = data.pop("session_id")  # pyright: ignore[reportUnknownMemberType]
+    return data  # pyright: ignore[reportUnknownVariableType]
 
   @computed_field(return_type=str | None)
   @property
@@ -307,8 +315,8 @@ class BrowserSessionResponse(BaseModel):
         DeprecationWarning,
         stacklevel=2,
       )
-      data["profile_id"] = data.pop("session_id")
-    return data
+      data["profile_id"] = data.pop("session_id")  # pyright: ignore[reportUnknownMemberType]
+    return data  # pyright: ignore[reportUnknownVariableType]
 
   @computed_field(return_type=str | None)
   @property
@@ -348,8 +356,8 @@ class BrowserProfilesResponse(BaseModel):
         DeprecationWarning,
         stacklevel=2,
       )
-      data["profile_ids"] = data.pop("session_ids")
-    return data
+      data["profile_ids"] = data.pop("session_ids")  # pyright: ignore[reportUnknownMemberType]
+    return data  # pyright: ignore[reportUnknownVariableType]
 
   @computed_field(return_type=list[str])
   @property
@@ -512,6 +520,9 @@ class BaseClient:
   def _update_task(self, task_id: str, payload: TaskUpdateRequest) -> bool:
     raise NotImplementedError
 
+  def _send_task_event(self, task_id: str, event: TaskEvent) -> TaskEventResponse:
+    raise NotImplementedError
+
 
 class BaseTaskHandle:
   """A handle to a running task."""
@@ -529,7 +540,7 @@ class BaseTaskHandle:
   def stop(self) -> None:
     raise NotImplementedError
 
-  def update(self, payload: TaskUpdateRequest) -> bool:
+  def send_event(self, event: TaskEvent) -> TaskEventResponse:
     raise NotImplementedError
 
   def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
@@ -555,7 +566,7 @@ class BaseAsyncTaskHandle(BaseTaskHandle):
   async def stop(self) -> None:
     raise NotImplementedError
 
-  async def update(self, payload: TaskUpdateRequest) -> bool:
+  async def send_event(self, event: TaskEvent) -> TaskEventResponse:
     raise NotImplementedError
 
   async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
