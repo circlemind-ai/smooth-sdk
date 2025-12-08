@@ -259,11 +259,13 @@ class SmoothClient(BaseClient):
     api_key: str | None = None,
     base_url: str = BASE_URL,
     api_version: str = "v1",
+    timeout: int | None = 30,
   ):
     """Initializes the synchronous client."""
     super().__init__(api_key, base_url, api_version)
     self._session = requests.Session()
     self._session.headers.update(self.headers)
+    self._timeout = timeout
 
   def __enter__(self):
     """Enters the synchronous context manager."""
@@ -281,7 +283,7 @@ class SmoothClient(BaseClient):
   def _submit_task(self, payload: TaskRequest) -> TaskResponse:
     """Submits a task to be run."""
     try:
-      response = self._session.post(f"{self.base_url}/task", json=payload.model_dump())
+      response = self._session.post(f"{self.base_url}/task", json=payload.model_dump(), timeout=self._timeout)
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
     except requests.exceptions.RequestException as e:
@@ -295,7 +297,7 @@ class SmoothClient(BaseClient):
 
     try:
       url = f"{self.base_url}/task/{task_id}"
-      response = self._session.get(url, params=query_params)
+      response = self._session.get(url, params=query_params, timeout=self._timeout)
       data = self._handle_response(response)
       return TaskResponse(**data["r"])
     except requests.exceptions.RequestException as e:
@@ -308,7 +310,7 @@ class SmoothClient(BaseClient):
       raise ValueError("Task ID cannot be empty.")
 
     try:
-      response = self._session.put(f"{self.base_url}/task/{task_id}", json=payload.model_dump())
+      response = self._session.put(f"{self.base_url}/task/{task_id}", json=payload.model_dump(), timeout=self._timeout)
       self._handle_response(response)
       return True
     except requests.exceptions.RequestException as e:
@@ -324,6 +326,7 @@ class SmoothClient(BaseClient):
       response = self._session.post(
         f"{self.base_url}/task/{task_id}/event",
         json=event.model_dump(),
+        timeout=self._timeout,
       )
       data = self._handle_response(response)
       return TaskEventResponse(**data["r"])
@@ -337,7 +340,7 @@ class SmoothClient(BaseClient):
       raise ValueError("Task ID cannot be empty.")
 
     try:
-      response = self._session.delete(f"{self.base_url}/task/{task_id}")
+      response = self._session.delete(f"{self.base_url}/task/{task_id}", timeout=self._timeout)
       self._handle_response(response)
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
