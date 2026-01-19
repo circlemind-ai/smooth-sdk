@@ -519,7 +519,7 @@ class SmoothClient(BaseClient):
     extensions: list[str] | None = None,
   ) -> SessionHandle:
     task_handle = self.run(
-      task="",  # type: ignore
+      task=None,  # type: ignore
       url=url,
       agent=agent,
       device=device,
@@ -1240,7 +1240,7 @@ class SmoothAsyncClient(BaseClient):
     extensions: list[str] | None = None,
   ):
     task_handle = await self.run(
-      task="",  # type: ignore
+      task=None,  # type: ignore
       url=url,
       files=files,
       agent=agent,
