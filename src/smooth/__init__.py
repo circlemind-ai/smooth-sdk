@@ -15,6 +15,7 @@ from typing import Any, Literal, Type, cast
 import httpx
 import requests
 from deprecated import deprecated
+from nanoid import generate
 from pydantic import BaseModel, Field
 
 from ._base import (
@@ -220,13 +221,16 @@ class TaskHandle(BaseTaskHandle):
 
   def send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
     """Sends an event to a running task."""
-    event_id = self._client._send_task_event(self._id, event).id
+    event.id = event.id or generate()
     if has_result:
       future = Future[Any]()
-      self._event_futures[event_id] = future
+      self._event_futures[event.id] = future
 
+      self._client._send_task_event(self._id, event)
       return future.result()
-    return None
+    else:
+      self._client._send_task_event(self._id, event)
+      return None
 
   # --- Action Methods ---
 
@@ -255,8 +259,23 @@ class TaskHandle(BaseTaskHandle):
     )
     return self.send_event(event, has_result=True)
 
+  @deprecated("exec_js is deprecated, use evaluate_js instead")
   def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any:
     """Executes JavaScript code in the browser context."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "exec_js",
+        "input": {
+          "js": code,
+          "args": args,
+        },
+      },
+    )
+    return self.send_event(event, has_result=True)
+
+  def evaluate_js(self, code: str, args: dict[str, Any] | None = None) -> Any:
+    """Evaluates JavaScript code in the browser context."""
     event = TaskEvent(
       name="browser_action",
       payload={
@@ -344,12 +363,12 @@ class SessionHandle(TaskHandle):
 
   def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
     """Exits the context manager."""
-    self.close()
+    self.close(force=False)
     self._disconnect()
 
   # --- Session Methods ---
 
-  def close(self):
+  def close(self, force: bool = True):
     """Closes the session."""
     event = TaskEvent(
       name="browser_action",
@@ -482,10 +501,7 @@ class SmoothClient(BaseClient):
   def session(
     self,
     url: str | None = None,
-    metadata: dict[str, str | int | float | bool] | None = None,
-    files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
-    max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
     allowed_urls: list[str] | None = None,
     enable_recording: bool = True,
@@ -503,12 +519,9 @@ class SmoothClient(BaseClient):
     extensions: list[str] | None = None,
   ) -> SessionHandle:
     task_handle = self.run(
-      task=None,  # type: ignore
+      task="",  # type: ignore
       url=url,
-      metadata=metadata,
-      files=files,
       agent=agent,
-      max_steps=max_steps,
       device=device,
       allowed_urls=allowed_urls,
       enable_recording=enable_recording,
@@ -833,7 +846,7 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
     self._tools = {tool.name: tool for tool in (tools or [])}
 
     # Polling
-    self._is_alive = True
+    self._is_alive = 0
     self._poll_interval = 1.0
 
     # Events
@@ -935,13 +948,16 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
 
   async def send_event(self, event: TaskEvent, has_result: bool = False) -> asyncio.Future[Any] | None:
     """Sends an event to a running task."""
-    event_id = (await self._client._send_task_event(self._id, event)).id
+    event.id = event.id or generate()
     if has_result:
       future = asyncio.get_running_loop().create_future()
-      self._event_futures[event_id] = future
+      self._event_futures[event.id] = future
 
+      asyncio.create_task(self._client._send_task_event(self._id, event))
       return future
-    return None
+    else:
+      asyncio.create_task(self._client._send_task_event(self._id, event))
+      return None
 
   # --- Action Methods ---
 
@@ -954,7 +970,7 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
         "input": {"url": url},
       },
     )
-    return cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
+    return await cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
 
   async def extract(self, schema: dict[str, Any], prompt: str | None = None) -> Any:
     """Extracts from the given URL."""
@@ -968,8 +984,9 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
         },
       },
     )
-    return cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
+    return await cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
 
+  @deprecated("exec_js is deprecated, use evaluate_js instead")
   async def exec_js(self, code: str, args: dict[str, Any] | None = None) -> asyncio.Future[Any]:
     """Executes JavaScript code in the browser context."""
     event = TaskEvent(
@@ -982,7 +999,22 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
         },
       },
     )
+    # TODO: This is non-blocking for backward compatibility
     return cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
+
+  async def evaluate_js(self, code: str, args: dict[str, Any] | None = None) -> asyncio.Future[Any]:
+    """Executes JavaScript code in the browser context."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "exec_js",
+        "input": {
+          "js": code,
+          "args": args,
+        },
+      },
+    )
+    return await cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
 
   # --- Private Methods ---
 
@@ -1189,10 +1221,8 @@ class SmoothAsyncClient(BaseClient):
   async def session(
     self,
     url: str | None = None,
-    metadata: dict[str, str | int | float | bool] | None = None,
     files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
-    max_steps: int = 32,
     device: Literal["desktop", "mobile"] = "mobile",
     allowed_urls: list[str] | None = None,
     enable_recording: bool = True,
@@ -1210,12 +1240,10 @@ class SmoothAsyncClient(BaseClient):
     extensions: list[str] | None = None,
   ):
     task_handle = await self.run(
-      task=None,  # type: ignore
+      task="",  # type: ignore
       url=url,
-      metadata=metadata,
       files=files,
       agent=agent,
-      max_steps=max_steps,
       device=device,
       allowed_urls=allowed_urls,
       enable_recording=enable_recording,
