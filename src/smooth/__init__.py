@@ -24,6 +24,7 @@ from ._base import (
   BrowserSessionResponse,
   BrowserSessionsResponse,
   Certificate,
+  ContextRequest,
   Extension,
   ListExtensionsResponse,
   TaskEvent,
@@ -124,10 +125,10 @@ class TaskHandle(BaseTaskHandle):
     """Stops the task."""
     self._client._delete_task(self._id)
 
-  @deprecated("update is deprecated, use send_event instead")
-  def update(self, payload: TaskUpdateRequest) -> bool:
-    """Updates a running task with user input."""
-    return self._client._update_task(self._id, payload)
+  # @deprecated("update is deprecated, use send_event instead")
+  # def update(self, payload: TaskUpdateRequest) -> bool:
+  #   """Updates a running task with user input."""
+  #   return self._client._update_task(self._id, payload)
 
   def send_event(self, event: TaskEvent, has_result: bool = False, timeout: int = 60) -> Any | None:
     """Sends an event to a running task."""
@@ -192,63 +193,63 @@ class TaskHandle(BaseTaskHandle):
       time.sleep(poll_interval)
     raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
 
-  def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
-    """Returns the live URL for the task."""
-    if self._task_response and self._task_response.live_url:
-      return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+  # def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
+  #   """Returns the live URL for the task."""
+  #   if self._task_response and self._task_response.live_url:
+  #     return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id())
-      self._task_response = task_response
-      if self._task_response.live_url:
-        return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
-      time.sleep(1)
+  #   start_time = time.time()
+  #   while timeout is None or (time.time() - start_time) < timeout:
+  #     task_response = self._client._get_task(self.id())
+  #     self._task_response = task_response
+  #     if self._task_response.live_url:
+  #       return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+  #     time.sleep(1)
 
-    raise TimeoutError(f"Live URL not available for task {self.id()}.")
+  #   raise TimeoutError(f"Live URL not available for task {self.id()}.")
 
-  def recording_url(self, timeout: int | None = None) -> str:
-    """Returns the recording URL for the task."""
-    if self._task_response and self._task_response.recording_url is not None:
-      return self._task_response.recording_url
+  # def recording_url(self, timeout: int | None = None) -> str:
+  #   """Returns the recording URL for the task."""
+  #   if self._task_response and self._task_response.recording_url is not None:
+  #     return self._task_response.recording_url
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id())
-      self._task_response = task_response
-      if task_response.recording_url is not None:
-        if not task_response.recording_url:
-          raise ApiError(
-            status_code=404,
-            detail=(
-              f"Recording URL not available for task {self.id()}."
-              " Set `enable_recording=True` when creating the task to enable it."
-            ),
-          )
-        return task_response.recording_url
-      time.sleep(1)
-    raise TimeoutError(f"Recording URL not available for task {self.id()}.")
+  #   start_time = time.time()
+  #   while timeout is None or (time.time() - start_time) < timeout:
+  #     task_response = self._client._get_task(self.id())
+  #     self._task_response = task_response
+  #     if task_response.recording_url is not None:
+  #       if not task_response.recording_url:
+  #         raise ApiError(
+  #           status_code=404,
+  #           detail=(
+  #             f"Recording URL not available for task {self.id()}."
+  #             " Set `enable_recording=True` when creating the task to enable it."
+  #           ),
+  #         )
+  #       return task_response.recording_url
+  #     time.sleep(1)
+  #   raise TimeoutError(f"Recording URL not available for task {self.id()}.")
 
-  def downloads_url(self, timeout: int | None = None) -> str:
-    """Returns the downloads URL for the task."""
-    if self._task_response and self._task_response.downloads_url is not None:
-      return self._task_response.downloads_url
+  # def downloads_url(self, timeout: int | None = None) -> str:
+  #   """Returns the downloads URL for the task."""
+  #   if self._task_response and self._task_response.downloads_url is not None:
+  #     return self._task_response.downloads_url
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id(), query_params={"downloads": "true"})
-      self._task_response = task_response
-      if task_response.downloads_url is not None:
-        if not task_response.downloads_url:
-          raise ApiError(
-            status_code=404,
-            detail=(
-              f"Downloads URL not available for task {self.id()}." " Make sure the task downloaded files during its execution."
-            ),
-          )
-        return task_response.downloads_url
-      time.sleep(1)
-    raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
+  #   start_time = time.time()
+  #   while timeout is None or (time.time() - start_time) < timeout:
+  #     task_response = self._client._get_task(self.id(), query_params={"downloads": "true"})
+  #     self._task_response = task_response
+  #     if task_response.downloads_url is not None:
+  #       if not task_response.downloads_url:
+  #         raise ApiError(
+  #           status_code=404,
+  #           detail=(
+  #             f"Downloads URL not available for task {self.id()}." " Make sure the task downloaded files during its execution."
+  #           ),
+  #         )
+  #       return task_response.downloads_url
+  #     time.sleep(1)
+  #   raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
 
 
 class SmoothClient(BaseClient):
@@ -1175,6 +1176,7 @@ __all__ = [
   "TaskHandle",
   "AsyncTaskHandle",
   "BrowserSessionHandle",
+  "ContextRequest",
   "TaskEvent",
   "TaskRequest",
   "TaskResponse",
