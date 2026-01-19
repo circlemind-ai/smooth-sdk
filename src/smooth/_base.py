@@ -111,7 +111,9 @@ class TaskRequest(BaseModel):
 
   model_config = ConfigDict(extra="allow")
 
-  task: str = Field(description="The task to run.")
+  task: str | None = Field(
+    default=None, description="The task to run. If None, opens a blank browser and waits for further instructions."
+  )
   response_model: dict[str, Any] | None = Field(
     default=None,
     description="If provided, the JSON schema describing the desired output structure. Default is None",

@@ -5,7 +5,10 @@ import asyncio
 import base64
 import io
 import logging
+import threading
 import time
+from concurrent.futures import Future
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import Any, Literal, Type, cast
 
@@ -114,42 +117,143 @@ class TaskHandle(BaseTaskHandle):
     super().__init__(task_id)
     self._client = client
     self._tools = {tool.name: tool for tool in (tools or [])}
+
+    # Polling
+    self._is_alive = 0
+    self._poll_interval = 1.0
+
+    # Events
     self._last_event_t = 0
+    self._event_futures: dict[str | None, Future[Any]] = {}
 
   def id(self):
     """Returns the task ID."""
     return self._id
 
+  # --- Task Methods ---
+
   def stop(self):
     """Stops the task."""
     self._client._delete_task(self._id)
 
-  @deprecated("update is deprecated, use send_event instead")
-  def update(self, payload: TaskUpdateRequest) -> bool:
-    """Updates a running task with user input."""
-    return self._client._update_task(self._id, payload)
+  def result(self, timeout: int | None = None, poll_interval: float | None = None) -> TaskResponse:
+    """Waits for the task to complete and returns the result."""
+    if self._task_response and self._task_response.status not in [
+      "running",
+      "waiting",
+    ]:
+      return self._task_response
 
-  def send_event(self, event: TaskEvent, has_result: bool = False, timeout: int = 60) -> Any | None:
+    if timeout is not None and timeout < 1:
+      raise ValueError("Timeout must be at least 1 second.")
+
+    if poll_interval is not None:
+      logger.warning("poll_interval is deprecated.")
+
+    with self._connection():
+      start_time = time.time()
+      while timeout is None or (time.time() - start_time) < timeout:
+        if self._task_response and self._task_response.status not in ["running", "waiting"]:
+          return self._task_response
+
+        time.sleep(0.2)
+    raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
+
+  def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
+    """Returns the live URL for the task."""
+    if self._task_response and self._task_response.live_url:
+      return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+
+    with self._connection():
+      start_time = time.time()
+      while timeout is None or (time.time() - start_time) < timeout:
+        if self._task_response and self._task_response.live_url:
+          return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+
+        time.sleep(0.2)
+    raise TimeoutError(f"Live URL not available for task {self.id()}.")
+
+  def recording_url(self, timeout: int | None = None) -> str:
+    """Returns the recording URL for the task."""
+    if self._task_response and self._task_response.recording_url is not None:
+      return self._task_response.recording_url
+
+    with self._connection():
+      start_time = time.time()
+      while timeout is None or (time.time() - start_time) < timeout:
+        if self._task_response and self._task_response.recording_url is not None:
+          if not self._task_response.recording_url:
+            raise ApiError(
+              status_code=404,
+              detail=(
+                f"Recording URL not available for task {self.id()}."
+                " Set `enable_recording=True` when creating the task to enable it."
+              ),
+            )
+          return self._task_response.recording_url
+
+        time.sleep(0.2)
+    raise TimeoutError(f"Recording URL not available for task {self.id()}.")
+
+  def downloads_url(self, timeout: int | None = None) -> str:
+    """Returns the downloads URL for the task."""
+    if self._task_response and self._task_response.downloads_url is not None:
+      return self._task_response.downloads_url
+
+    with self._connection():
+      start_time = time.time()
+      while timeout is None or (time.time() - start_time) < timeout:
+        if self._task_response and self._task_response.status not in ["running", "waiting"]:
+          task_response = self._client._get_task(self.id(), query_params={"downloads": "true"})
+          if task_response.downloads_url is not None:
+            if not task_response.downloads_url:
+              raise ApiError(
+                status_code=404,
+                detail=(
+                  f"Downloads URL not available for task {self.id()}. Make sure the task downloaded files during its execution."
+                ),
+              )
+            return task_response.downloads_url
+          time.sleep(0.8)
+      time.sleep(0.2)
+    raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
+
+  def send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
     """Sends an event to a running task."""
     event_id = self._client._send_task_event(self._id, event).id
     if has_result:
-      time_now = time.time()
-      while True:
-        task_response = self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
-        if task_response.events:
-          for e in task_response.events or []:
-            if e.name == "browser_action" and e.id == event_id:
-              code = e.payload.get("code")
-              if code == 200:
-                return e.payload.get("output")
-              elif code == 400:
-                raise ToolCallError(e.payload.get("output", "Unknown error."))
-              elif code == 500:
-                raise ValueError(e.payload.get("output", "Unknown error."))
-        if (time.time() - time_now) >= timeout:
-          raise TimeoutError(f"[{event.name}] Execution timeout.")
-        time.sleep(1)
+      future = Future[Any]()
+      self._event_futures[event_id] = future
+
+      return future.result()
     return None
+
+  # --- Action Methods ---
+
+  def goto(self, url: str) -> Any:
+    """Navigates to the given URL."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "goto",
+        "input": {"url": url},
+      },
+    )
+    return self.send_event(event, has_result=True)
+
+  def extract(self, schema: dict[str, Any], prompt: str | None = None) -> Any:
+    """Extracts from the given URL."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "extract",
+        "input": {
+          "schema": schema,
+          "prompt": prompt,
+        },
+      },
+    )
+    return self.send_event(event, has_result=True)
 
   def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any:
     """Executes JavaScript code in the browser context."""
@@ -165,90 +269,119 @@ class TaskHandle(BaseTaskHandle):
     )
     return self.send_event(event, has_result=True)
 
-  def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
-    """Waits for the task to complete and returns the result."""
-    if self._task_response and self._task_response.status not in [
-      "running",
-      "waiting",
-    ]:
-      return self._task_response
+  # --- Private Methods ---
 
-    if timeout is not None and timeout < 1:
-      raise ValueError("Timeout must be at least 1 second.")
-    if poll_interval < 0.1:
-      raise ValueError("Poll interval must be at least 100 milliseconds.")
+  def _connect(self):
+    # We use a counter to keep track of how many clients requested a connection
+    # so we know to (i) start polling only once, and (ii) stop polling only when all clients have disconnected
+    self._is_alive += 1
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
+    if self._is_alive != 1:
+      return
+
+    while self._is_alive > 0:
       task_response = self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
       self._task_response = task_response
+
       if task_response.status not in ["running", "waiting"]:
-        return task_response
+        if task_response.status != "done":
+          # Cancel all pending futures
+          for future in self._event_futures.values():
+            if not future.done():
+              future.cancel()
+          self._event_futures.clear()
       if task_response.events:
         self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
-        for event in task_response.events or []:
+        for event in task_response.events:
           if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
-            tool(self, event.id, **event.payload.get("input", {}))
-      time.sleep(poll_interval)
-    raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
+            # Run tool in a separate thread to avoid blocking
+            threading.Thread(target=tool, args=(self, event.id), kwargs=event.payload.get("input", {})).start()
+          elif event.name == "browser_action":
+            future = self._event_futures.get(event.id)
+            if future and not future.done():
+              del self._event_futures[event.id]
+              code = event.payload.get("code")
+              if code == 200:
+                future.set_result(event.payload.get("output"))
+              elif code == 400:
+                future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
+              elif code == 500:
+                future.set_exception(ValueError(event.payload.get("output", "Unknown error.")))
 
-  def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
-    """Returns the live URL for the task."""
-    if self._task_response and self._task_response.live_url:
-      return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+      if self._is_alive > 0:
+        time.sleep(self._poll_interval)
+      else:
+        break
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id())
-      self._task_response = task_response
-      if self._task_response.live_url:
-        return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
-      time.sleep(1)
+  def _disconnect(self):
+    """Disconnects the task handle from the task."""
+    self._is_alive = 0 if self._is_alive < 1 else self._is_alive - 1
 
-    raise TimeoutError(f"Live URL not available for task {self.id()}.")
+  @contextmanager
+  def _connection(self):
+    """Context manager to connect to the task."""
+    threading.Thread(target=self._connect).start()
+    try:
+      yield self
+    finally:
+      self._disconnect()
 
-  def recording_url(self, timeout: int | None = None) -> str:
-    """Returns the recording URL for the task."""
-    if self._task_response and self._task_response.recording_url is not None:
-      return self._task_response.recording_url
+  # --- Deprecated Methods ---
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id())
-      self._task_response = task_response
-      if task_response.recording_url is not None:
-        if not task_response.recording_url:
-          raise ApiError(
-            status_code=404,
-            detail=(
-              f"Recording URL not available for task {self.id()}."
-              " Set `enable_recording=True` when creating the task to enable it."
-            ),
-          )
-        return task_response.recording_url
-      time.sleep(1)
-    raise TimeoutError(f"Recording URL not available for task {self.id()}.")
+  @deprecated("update is deprecated, use send_event instead")
+  def update(self, payload: TaskUpdateRequest) -> bool:
+    """Updates a running task with user input."""
+    return self._client._update_task(self._id, payload)
 
-  def downloads_url(self, timeout: int | None = None) -> str:
-    """Returns the downloads URL for the task."""
-    if self._task_response and self._task_response.downloads_url is not None:
-      return self._task_response.downloads_url
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = self._client._get_task(self.id(), query_params={"downloads": "true"})
-      self._task_response = task_response
-      if task_response.downloads_url is not None:
-        if not task_response.downloads_url:
-          raise ApiError(
-            status_code=404,
-            detail=(
-              f"Downloads URL not available for task {self.id()}." " Make sure the task downloaded files during its execution."
-            ),
-          )
-        return task_response.downloads_url
-      time.sleep(1)
-    raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
+class SessionHandle(TaskHandle):
+  """A handle to an open browser session."""
+
+  def __enter__(self):
+    """Enters the context manager."""
+    threading.Thread(target=self._connect).start()
+    return self
+
+  def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
+    """Exits the context manager."""
+    self.close()
+    self._disconnect()
+
+  # --- Session Methods ---
+
+  def close(self):
+    """Closes the session."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "close",
+      },
+    )
+    return self.send_event(event, has_result=False)
+
+  def run_task(
+    self,
+    task: str,
+    max_steps: int = 32,
+    response_model: dict[str, Any] | None = None,
+    url: str | None = None,
+    metadata: dict[str, Any] | None = None,
+  ) -> Any:
+    """Extracts from the given URL."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "run_task",
+        "input": {
+          "task": task,
+          "max_steps": max_steps,
+          "response_model": response_model,
+          "url": url,
+          "metadata": metadata,
+        },
+      },
+    )
+    return self.send_event(event, has_result=True)
 
 
 class SmoothClient(BaseClient):
@@ -345,6 +478,55 @@ class SmoothClient(BaseClient):
     except requests.exceptions.RequestException as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  def session(
+    self,
+    url: str | None = None,
+    metadata: dict[str, str | int | float | bool] | None = None,
+    files: list[str] | None = None,
+    agent: Literal["smooth"] = "smooth",
+    max_steps: int = 32,
+    device: Literal["desktop", "mobile"] = "mobile",
+    allowed_urls: list[str] | None = None,
+    enable_recording: bool = True,
+    profile_id: str | None = None,
+    profile_read_only: bool = False,
+    stealth_mode: bool = False,
+    proxy_server: str | None = None,
+    proxy_username: str | None = None,
+    proxy_password: str | None = None,
+    certificates: list[Certificate | dict[str, Any]] | None = None,
+    use_adblock: bool | None = True,
+    additional_tools: dict[str, dict[str, Any] | None] | None = None,
+    custom_tools: list[SmoothTool | dict[str, Any]] | None = None,
+    experimental_features: dict[str, Any] | None = None,
+    extensions: list[str] | None = None,
+  ) -> SessionHandle:
+    task_handle = self.run(
+      task=None,  # type: ignore
+      url=url,
+      metadata=metadata,
+      files=files,
+      agent=agent,
+      max_steps=max_steps,
+      device=device,
+      allowed_urls=allowed_urls,
+      enable_recording=enable_recording,
+      profile_id=profile_id,
+      profile_read_only=profile_read_only,
+      stealth_mode=stealth_mode,
+      proxy_server=proxy_server,
+      proxy_username=proxy_username,
+      proxy_password=proxy_password,
+      certificates=certificates,
+      use_adblock=use_adblock,
+      additional_tools=additional_tools,
+      custom_tools=custom_tools,
+      experimental_features=experimental_features,
+      extensions=extensions,
+    )
+
+    return SessionHandle(task_handle._id, self, tools=list(task_handle._tools.values()) if task_handle._tools else None)
 
   def run(
     self,
@@ -649,17 +831,107 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
     super().__init__(task_id)
     self._client = client
     self._tools = {tool.name: tool for tool in (tools or [])}
+
+    # Polling
+    self._is_alive = True
+    self._poll_interval = 1.0
+
+    # Events
     self._last_event_t = 0
     self._event_futures: dict[str | None, asyncio.Future[Any]] = {}
+
+  # --- Task Methods ---
 
   async def stop(self):
     """Stops the task."""
     await self._client._delete_task(self._id)
 
-  @deprecated("update is deprecated, use send_event instead")
-  async def update(self, payload: TaskUpdateRequest) -> bool:
-    """Updates a running task with user input."""
-    return await self._client._update_task(self._id, payload)
+  async def result(self, timeout: int | None = None, poll_interval: float | None = None) -> TaskResponse:
+    """Waits for the task to complete and returns the result."""
+    if self._task_response and self._task_response.status not in [
+      "running",
+      "waiting",
+    ]:
+      return self._task_response
+
+    if timeout is not None and timeout < 1:
+      raise ValueError("Timeout must be at least 1 second.")
+
+    if poll_interval is not None:
+      logger.warning("poll_interval is deprecated.")
+
+    loop = asyncio.get_running_loop()
+    async with self._connection():
+      start_time = loop.time()
+      while timeout is None or (loop.time() - start_time) < timeout:
+        if self._task_response and self._task_response.status not in ["running", "waiting"]:
+          return self._task_response
+
+        await asyncio.sleep(0.2)
+      raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
+
+  async def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
+    """Returns the live URL for the task."""
+    if self._task_response and self._task_response.live_url:
+      return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+
+    loop = asyncio.get_running_loop()
+    async with self._connection():
+      start_time = loop.time()
+      while timeout is None or (loop.time() - start_time) < timeout:
+        if self._task_response and self._task_response.live_url:
+          return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+        await asyncio.sleep(0.2)
+
+    raise TimeoutError(f"Live URL not available for task {self.id()}.")
+
+  async def recording_url(self, timeout: int | None = None) -> str:
+    """Returns the recording URL for the task."""
+    if self._task_response and self._task_response.recording_url is not None:
+      return self._task_response.recording_url
+
+    loop = asyncio.get_running_loop()
+    async with self._connection():
+      start_time = loop.time()
+      while timeout is None or (loop.time() - start_time) < timeout:
+        if self._task_response and self._task_response.recording_url is not None:
+          if not self._task_response.recording_url:
+            raise ApiError(
+              status_code=404,
+              detail=(
+                f"Recording URL not available for task {self.id()}."
+                " Set `enable_recording=True` when creating the task to enable it."
+              ),
+            )
+          return self._task_response.recording_url
+        await asyncio.sleep(0.2)
+
+    raise TimeoutError(f"Recording URL not available for task {self.id()}.")
+
+  async def downloads_url(self, timeout: int | None = None) -> str:
+    """Returns the downloads URL for the task."""
+    if self._task_response and self._task_response.downloads_url is not None:
+      return self._task_response.downloads_url
+
+    loop = asyncio.get_running_loop()
+    async with self._connection():
+      start_time = loop.time()
+      while timeout is None or (loop.time() - start_time) < timeout:
+        if self._task_response and self._task_response.status not in ["running", "waiting"]:
+          task_response = await self._client._get_task(self.id(), query_params={"downloads": "true"})
+          if task_response.downloads_url is not None:
+            if not task_response.downloads_url:
+              raise ApiError(
+                status_code=404,
+                detail=(
+                  f"Downloads URL not available for task {self.id()}. Make sure the task downloaded files during its execution."
+                ),
+              )
+            return task_response.downloads_url
+          await asyncio.sleep(0.8)
+      await asyncio.sleep(0.2)
+
+    raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
 
   async def send_event(self, event: TaskEvent, has_result: bool = False) -> asyncio.Future[Any] | None:
     """Sends an event to a running task."""
@@ -670,6 +942,33 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
 
       return future
     return None
+
+  # --- Action Methods ---
+
+  async def goto(self, url: str) -> Any:
+    """Navigates to the given URL."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "goto",
+        "input": {"url": url},
+      },
+    )
+    return cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
+
+  async def extract(self, schema: dict[str, Any], prompt: str | None = None) -> Any:
+    """Extracts from the given URL."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "extract",
+        "input": {
+          "schema": schema,
+          "prompt": prompt,
+        },
+      },
+    )
+    return cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
 
   async def exec_js(self, code: str, args: dict[str, Any] | None = None) -> asyncio.Future[Any]:
     """Executes JavaScript code in the browser context."""
@@ -685,30 +984,33 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
     )
     return cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
 
-  async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
-    """Waits for the task to complete and returns the result."""
-    if self._task_response and self._task_response.status not in [
-      "running",
-      "waiting",
-    ]:
-      return self._task_response
+  # --- Private Methods ---
 
-    if timeout is not None and timeout < 1:
-      raise ValueError("Timeout must be at least 1 second.")
-    if poll_interval < 0.1:
-      raise ValueError("Poll interval must be at least 100 milliseconds.")
+  async def _connect(self):
+    # We use a counter to keep track of how many clients requested a connection
+    # so we know to (i) start polling only once, and (ii) stop polling only when all clients have disconnected
+    self._is_alive += 1
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
+    if self._is_alive != 1:
+      return
+
+    loop = asyncio.get_running_loop()
+    while self._is_alive > 0:
       task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
       self._task_response = task_response
+
       if task_response.status not in ["running", "waiting"]:
-        return task_response
+        if task_response.status != "done":
+          # Cancel all pending futures
+          for future in self._event_futures.values():
+            if not future.done():
+              future.cancel()
+          self._event_futures.clear()
       if task_response.events:
         self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
         for event in task_response.events:
           if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
-            asyncio.run_coroutine_threadsafe(tool(self, event.id, **event.payload.get("input", {})), asyncio.get_running_loop())
+            asyncio.run_coroutine_threadsafe(tool(self, event.id, **event.payload.get("input", {})), loop)
           elif event.name == "browser_action":
             future = self._event_futures.get(event.id)
             if future and not future.done():
@@ -721,68 +1023,80 @@ class AsyncTaskHandle(BaseAsyncTaskHandle):
               elif code == 500:
                 future.set_exception(ValueError(event.payload.get("output", "Unknown error.")))
 
-      await asyncio.sleep(poll_interval)
-    raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
+      if self._is_alive > 0:
+        await asyncio.sleep(self._poll_interval)
+      else:
+        break
 
-  async def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
-    """Returns the live URL for the task."""
-    if self._task_response and self._task_response.live_url:
-      return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+  def _disconnect(self):
+    """Disconnects the task handle from the task."""
+    self._is_alive = 0 if self._is_alive < 1 else self._is_alive - 1
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = await self._client._get_task(self.id())
-      self._task_response = task_response
-      if self._task_response.live_url:
-        return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
-      await asyncio.sleep(1)
+  @asynccontextmanager
+  async def _connection(self):
+    """Context manager to connect to the task."""
+    asyncio.create_task(self._connect())
+    try:
+      yield self
+    finally:
+      self._disconnect()
 
-    raise TimeoutError(f"Live URL not available for task {self.id()}.")
+  # --- Deprecated Methods ---
 
-  async def recording_url(self, timeout: int | None = None) -> str:
-    """Returns the recording URL for the task."""
-    if self._task_response and self._task_response.recording_url is not None:
-      return self._task_response.recording_url
+  @deprecated("update is deprecated, use send_event instead")
+  async def update(self, payload: TaskUpdateRequest) -> bool:
+    """Updates a running task with user input."""
+    return await self._client._update_task(self._id, payload)
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = await self._client._get_task(self.id())
-      self._task_response = task_response
-      if task_response.recording_url is not None:
-        if not task_response.recording_url:
-          raise ApiError(
-            status_code=404,
-            detail=(
-              f"Recording URL not available for task {self.id()}."
-              " Set `enable_recording=True` when creating the task to enable it."
-            ),
-          )
-        return task_response.recording_url
-      await asyncio.sleep(1)
 
-    raise TimeoutError(f"Recording URL not available for task {self.id()}.")
+class AsyncSessionHandle(AsyncTaskHandle):
+  """A handle to an open browser session."""
 
-  async def downloads_url(self, timeout: int | None = None) -> str:
-    """Returns the downloads URL for the task."""
-    if self._task_response and self._task_response.downloads_url is not None:
-      return self._task_response.downloads_url
+  async def __aenter__(self):
+    """Enters the context manager."""
+    asyncio.create_task(self._connect())
+    return self
 
-    start_time = time.time()
-    while timeout is None or (time.time() - start_time) < timeout:
-      task_response = await self._client._get_task(self.id(), query_params={"downloads": "true"})
-      self._task_response = task_response
-      if task_response.downloads_url is not None:
-        if not task_response.downloads_url:
-          raise ApiError(
-            status_code=404,
-            detail=(
-              f"Downloads URL not available for task {self.id()}." " Make sure the task downloaded files during its execution."
-            ),
-          )
-        return task_response.downloads_url
-      await asyncio.sleep(1)
+  async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
+    """Exits the context manager."""
+    await self.close()
+    self._disconnect()
 
-    raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
+  # --- Session Methods ---
+
+  async def close(self):
+    """Closes the session."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "close",
+      },
+    )
+    return await self.send_event(event, has_result=False)
+
+  async def run_task(
+    self,
+    task: str,
+    max_steps: int = 32,
+    response_model: dict[str, Any] | None = None,
+    url: str | None = None,
+    metadata: dict[str, Any] | None = None,
+  ) -> Any:
+    """Extracts from the given URL."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "run_task",
+        "input": {
+          "task": task,
+          "max_steps": max_steps,
+          "response_model": response_model,
+          "url": url,
+          "metadata": metadata,
+        },
+      },
+    )
+    return await self.send_event(event, has_result=True)
 
 
 class SmoothAsyncClient(BaseClient):
@@ -872,6 +1186,55 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  async def session(
+    self,
+    url: str | None = None,
+    metadata: dict[str, str | int | float | bool] | None = None,
+    files: list[str] | None = None,
+    agent: Literal["smooth"] = "smooth",
+    max_steps: int = 32,
+    device: Literal["desktop", "mobile"] = "mobile",
+    allowed_urls: list[str] | None = None,
+    enable_recording: bool = True,
+    profile_id: str | None = None,
+    profile_read_only: bool = False,
+    stealth_mode: bool = False,
+    proxy_server: str | None = None,
+    proxy_username: str | None = None,
+    proxy_password: str | None = None,
+    certificates: list[Certificate | dict[str, Any]] | None = None,
+    use_adblock: bool | None = True,
+    additional_tools: dict[str, dict[str, Any] | None] | None = None,
+    custom_tools: list[AsyncSmoothTool | dict[str, Any]] | None = None,
+    experimental_features: dict[str, Any] | None = None,
+    extensions: list[str] | None = None,
+  ):
+    task_handle = await self.run(
+      task=None,  # type: ignore
+      url=url,
+      metadata=metadata,
+      files=files,
+      agent=agent,
+      max_steps=max_steps,
+      device=device,
+      allowed_urls=allowed_urls,
+      enable_recording=enable_recording,
+      profile_id=profile_id,
+      profile_read_only=profile_read_only,
+      stealth_mode=stealth_mode,
+      proxy_server=proxy_server,
+      proxy_username=proxy_username,
+      proxy_password=proxy_password,
+      certificates=certificates,
+      use_adblock=use_adblock,
+      additional_tools=additional_tools,
+      custom_tools=custom_tools,
+      experimental_features=experimental_features,
+      extensions=extensions,
+    )
+
+    return AsyncSessionHandle(task_handle._id, self, tools=list(task_handle._tools.values()) if task_handle._tools else None)
+
   async def run(
     self,
     task: str,
@@ -896,6 +1259,7 @@ class SmoothAsyncClient(BaseClient):
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
     custom_tools: list[AsyncSmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
+    extensions: list[str] | None = None,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
 
@@ -929,6 +1293,7 @@ class SmoothAsyncClient(BaseClient):
         additional_tools: Additional tools to enable for the task.
         custom_tools: Custom tools to register for the task.
         experimental_features: Experimental features to enable for the task.
+        extensions: List of extension IDs to load into the browser for this task.
 
     Returns:
         A handle to the running task.
@@ -965,6 +1330,7 @@ class SmoothAsyncClient(BaseClient):
       additional_tools=additional_tools,
       custom_tools=[tool.signature for tool in custom_tools_] if custom_tools_ else None,
       experimental_features=experimental_features,
+      extensions=extensions,
     )
 
     initial_response = await self._submit_task(payload)
