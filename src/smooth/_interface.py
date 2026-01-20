@@ -367,6 +367,11 @@ class TaskHandle(BaseTaskHandle):
     """Get the task response from the async handle."""
     return self._async_handle._task_response
 
+  @_task_response.setter
+  def _task_response(self, value: TaskResponse):
+    """Set the task response on the async handle."""
+    self._async_handle._task_response = value
+
   @deprecated("stop is deprecated")
   def stop(self):
     """Stops the task."""
