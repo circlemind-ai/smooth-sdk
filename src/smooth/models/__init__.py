@@ -1,21 +1,10 @@
 # pyright: reportPrivateUsage=false
 """Smooth python SDK types and models."""
 
-import asyncio
-import logging
-import os
 import warnings
 from typing import Any, Literal
 
-import httpx
-import requests
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
-
-# Configure logging
-logger = logging.getLogger("smooth")
-
-
-BASE_URL = "https://api.smooth.sh/api/"
 
 # --- Models ---
 
@@ -46,6 +35,8 @@ class ToolSignature(BaseModel):
 
 
 class TaskEvent(BaseModel):
+  """Task event model."""
+
   name: str = Field(description="The name of the event.")
   payload: dict[str, Any] = Field(description="The payload of the event.")
   id: str | None = Field(default=None, description="The ID of the event.")
@@ -53,57 +44,9 @@ class TaskEvent(BaseModel):
 
 
 class TaskEventResponse(BaseModel):
+  """Task event response model."""
+
   id: str = Field(description="The ID of the event.")
-
-
-class ToolCall(BaseModel):
-  """Tool call model."""
-
-  model_config = ConfigDict(extra="allow")  # we use the same field for request and response
-
-  # Request params
-  name: str | None = Field(default=None, description="The name of the tool being called.")
-  input: str | None = Field(default=None, description="The input provided to the tool (json encoded).")
-
-  # Response params
-  code: int | None = Field(default=None, description="The tool call returned HTTP status code.")
-  output: str | None = Field(default=None, description="The output produced by the tool (json encoded).")
-
-
-class ToolCallResponse(BaseModel):
-  """Tool call response model."""
-
-  model_config = ConfigDict(extra="allow")  # we use the same field for request and response
-
-  id: str = Field(description="The ID of the tool call.")
-  code: int = Field(description="The HTTP status code of the tool call.")
-  output: str = Field(description="The output produced by the tool (json encoded).")
-
-
-class TaskResponse(BaseModel):
-  """Task response model."""
-
-  model_config = ConfigDict(extra="allow")
-
-  id: str = Field(description="The ID of the task.")
-  status: Literal["waiting", "running", "done", "failed", "cancelled"] = Field(description="The status of the task.")
-  output: Any | None = Field(default=None, description="The output of the task.")
-  credits_used: int | None = Field(default=None, description="The amount of credits used to perform the task.")
-  device: Literal["desktop", "mobile"] | None = Field(default=None, description="The device type used for the task.")
-  live_url: str | None = Field(
-    default=None,
-    description="The URL to view and interact with the task execution.",
-  )
-  recording_url: str | None = Field(default=None, description="The URL to view the task recording.")
-  downloads_url: str | None = Field(
-    default=None,
-    description="The URL of the archive containing the downloaded files.",
-  )
-  created_at: int | None = Field(default=None, description="The timestamp when the task was created.")
-  tool_calls: dict[str, ToolCall] | None = Field(
-    default=None, description="Contains a list of pending tool calls.", deprecated=True
-  )
-  events: list[TaskEvent] | None = Field(default=None, description="The list of new events fired.")
 
 
 class TaskRequest(BaseModel):
@@ -225,6 +168,141 @@ class TaskRequest(BaseModel):
     if "profile_id" in data:
       data["session_id"] = data["profile_id"]
     return data
+
+
+class TaskResponse(BaseModel):
+  """Task response model."""
+
+  model_config = ConfigDict(extra="allow")
+
+  id: str = Field(description="The ID of the task.")
+  status: Literal["waiting", "running", "done", "failed", "cancelled"] = Field(description="The status of the task.")
+  output: Any | None = Field(default=None, description="The output of the task.")
+  credits_used: int | None = Field(default=None, description="The amount of credits used to perform the task.")
+  device: Literal["desktop", "mobile"] | None = Field(default=None, description="The device type used for the task.")
+  live_url: str | None = Field(
+    default=None,
+    description="The URL to view and interact with the task execution.",
+  )
+  recording_url: str | None = Field(default=None, description="The URL to view the task recording.")
+  downloads_url: str | None = Field(
+    default=None,
+    description="The URL of the archive containing the downloaded files.",
+  )
+  created_at: int | None = Field(default=None, description="The timestamp when the task was created.")
+  tool_calls: dict[str, "ToolCall"] | None = Field(
+    default=None, description="Contains a list of pending tool calls.", deprecated=True
+  )
+  events: list[TaskEvent] | None = Field(default=None, description="The list of new events fired.")
+
+
+class ProfileRequest(BaseModel):
+  """Request model for creating a browser profile."""
+
+  model_config = ConfigDict(extra="allow")
+
+  id: str | None = Field(
+    default=None,
+    description=("The ID to assign to the new profile. If None, a random name will be generated."),
+  )
+
+
+class ProfileResponse(BaseModel):
+  """Response model for creating a browser profile."""
+
+  model_config = ConfigDict(extra="allow")
+
+  id: str = Field(description="The ID of the created browser profile.")
+
+
+class UploadFileResponse(BaseModel):
+  """Response model for uploading a file."""
+
+  model_config = ConfigDict(extra="allow")
+
+  id: str = Field(description="The ID assigned to the uploaded file.")
+
+
+class UploadExtensionResponse(BaseModel):
+  """Response model for uploading an extension."""
+
+  model_config = ConfigDict(extra="allow")
+
+  id: str = Field(description="The uploaded extension ID.")
+
+
+class Extension(BaseModel):
+  """Extension model."""
+
+  model_config = ConfigDict(extra="allow")
+
+  id: str = Field(description="The ID of the extension.")
+  file_name: str = Field(description="The name of the extension.")
+  creation_time: int = Field(description="The creation timestamp.")
+
+
+###############################################################################################################
+# --- Action Responses ---
+###############################################################################################################
+
+
+class ActionGotoResponse(BaseModel):
+  """Response model for goto action."""
+
+  pass
+
+
+class ActionExtractResponse(BaseModel):
+  """Response model for extract action."""
+
+  data: Any = Field(description="The extracted data.")
+
+
+class ActionEvaluateJSResponse(BaseModel):
+  """Response model for evaluate_js action."""
+
+  result: Any = Field(description="The result of the JavaScript evaluation.")
+
+
+class ActionRunTaskResponse(BaseModel):
+  """Response model for run_task action."""
+
+  output: Any = Field(description="The task output.")
+
+
+class ActionStopSessionResponse(BaseModel):
+  """Response model for cancel_session action."""
+
+  pass
+
+
+###############################################################################################################
+# --- Deprecated ---
+###############################################################################################################
+
+
+class ToolCall(BaseModel):
+  """Tool call model."""
+
+  model_config = ConfigDict(extra="allow")  # we use the same field for request and response
+
+  # Request params
+  name: str | None = Field(default=None, description="The name of the tool being called.")
+  input: str | None = Field(default=None, description="The input provided to the tool (json encoded).")
+
+  # Response params
+  code: int | None = Field(default=None, description="The tool call returned HTTP status code.")
+  output: str | None = Field(default=None, description="The output produced by the tool (json encoded).")
+
+
+class ToolCallResponse(BaseModel):
+  """Tool call response model."""
+
+  model_config = ConfigDict(extra="allow")  # we use the same field for request and response
+
+  id: str = Field(description="The ID of the tool call.")
+  code: int = Field(description="The HTTP status code of the tool call.")
+  output: str = Field(description="The output produced by the tool (json encoded).")
 
 
 class TaskUpdateRequest(BaseModel):
@@ -398,188 +476,9 @@ class BrowserSessionsResponse(BrowserProfilesResponse):
   pass
 
 
-class UploadFileResponse(BaseModel):
-  """Response model for uploading a file."""
-
-  model_config = ConfigDict(extra="allow")
-
-  id: str = Field(description="The ID assigned to the uploaded file.")
-
-
-class UploadExtensionResponse(BaseModel):
-  """Response model for uploading an extension."""
-
-  model_config = ConfigDict(extra="allow")
-
-  id: str = Field(description="The uploaded extension ID.")
-
-
-class Extension(BaseModel):
-  """Extension model."""
-
-  model_config = ConfigDict(extra="allow")
-
-  id: str = Field(description="The ID of the extension.")
-  file_name: str = Field(description="The name of the extension.")
-  creation_time: int = Field(description="The creation timestamp.")
-
-
 class ListExtensionsResponse(BaseModel):
   """Response model for listing extensions."""
 
   model_config = ConfigDict(extra="allow")
 
   extensions: list[Extension] = Field(description="The list of extensions.")
-
-
-# --- Exception Handling ---
-
-
-class ApiError(Exception):
-  """Custom exception for API errors."""
-
-  def __init__(self, status_code: int, detail: str, response_data: dict[str, Any] | None = None):
-    """Initializes the API error."""
-    self.status_code = status_code
-    self.detail = detail
-    self.response_data = response_data
-    super().__init__(f"API Error {status_code}: {detail}")
-
-
-class TimeoutError(Exception):
-  """Custom exception for task timeouts."""
-
-  pass
-
-
-class ToolCallError(Exception):
-  """Custom exception for tool call errors."""
-
-  pass
-
-
-# --- Base Client ---
-
-
-class BaseClient:
-  """Base client for handling common API interactions."""
-
-  def __init__(
-    self,
-    api_key: str | None = None,
-    base_url: str = BASE_URL,
-    api_version: str = "v1",
-  ):
-    """Initializes the base client."""
-    # Try to get API key from environment if not provided
-    if not api_key:
-      api_key = os.getenv("CIRCLEMIND_API_KEY")
-
-    if not api_key:
-      raise ValueError("API key is required. Provide it directly or set CIRCLEMIND_API_KEY environment variable.")
-
-    if not base_url:
-      raise ValueError("Base URL cannot be empty.")
-
-    self.api_key = api_key
-    self.base_url = f"{base_url.rstrip('/')}/{api_version}"
-    self.headers = {
-      "apikey": self.api_key,
-      "User-Agent": "smooth-python-sdk/0.3.6",
-    }
-
-  def _handle_response(self, response: requests.Response | httpx.Response) -> dict[str, Any]:
-    """Handles HTTP responses and raises exceptions for errors."""
-    if 200 <= response.status_code < 300:
-      try:
-        return response.json()
-      except ValueError as e:
-        logger.error(f"Failed to parse JSON response: {e}")
-        raise ApiError(
-          status_code=response.status_code,
-          detail="Invalid JSON response from server",
-        ) from None
-
-    # Handle error responses
-    error_data = None
-    try:
-      error_data = response.json()
-      detail = error_data.get("detail", response.text)
-    except ValueError:
-      detail = response.text or f"HTTP {response.status_code} error"
-
-    logger.error(f"API error: {response.status_code} - {detail}")
-    raise ApiError(status_code=response.status_code, detail=detail, response_data=error_data)
-
-  def _submit_task(self, payload: TaskRequest) -> TaskResponse:
-    raise NotImplementedError
-
-  def _get_task(self, task_id: str, query_params: dict[str, Any] | None = None) -> TaskResponse:
-    raise NotImplementedError
-
-  def _delete_task(self, task_id: str) -> None:
-    raise NotImplementedError
-
-  def _update_task(self, task_id: str, payload: TaskUpdateRequest) -> bool:
-    raise NotImplementedError
-
-  def _send_task_event(self, task_id: str, event: TaskEvent) -> TaskEventResponse:
-    raise NotImplementedError
-
-
-class BaseTaskHandle:
-  """A handle to a running task."""
-
-  def __init__(self, task_id: str):
-    """Initializes the task handle."""
-    self._task_response: TaskResponse | None = None
-
-    self._id = task_id
-
-  def id(self):
-    """Returns the task ID."""
-    return self._id
-
-  def stop(self) -> None:
-    raise NotImplementedError
-
-  def send_event(self, event: TaskEvent) -> Any | None:
-    raise NotImplementedError
-
-  def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
-    raise NotImplementedError
-
-  def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None) -> str:
-    raise NotImplementedError
-
-  def recording_url(self, timeout: int | None = None) -> str:
-    raise NotImplementedError
-
-  def downloads_url(self, timeout: int | None = None) -> str:
-    raise NotImplementedError
-
-
-class BaseAsyncTaskHandle(BaseTaskHandle):
-  """A handle to a running task."""
-
-  def __init__(self, task_id: str):
-    """Initializes the task handle."""
-    super().__init__(task_id)
-
-  async def stop(self) -> None:
-    raise NotImplementedError
-
-  async def send_event(self, event: TaskEvent) -> asyncio.Future[Any] | None:
-    raise NotImplementedError
-
-  async def result(self, timeout: int | None = None, poll_interval: float = 1) -> TaskResponse:
-    raise NotImplementedError
-
-  async def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None) -> str:
-    raise NotImplementedError
-
-  async def recording_url(self, timeout: int | None = None) -> str:
-    raise NotImplementedError
-
-  async def downloads_url(self, timeout: int | None = None) -> str:
-    raise NotImplementedError
