@@ -14,7 +14,6 @@ from .models import (
   ActionExtractResponse,
   ActionGotoResponse,
   ActionRunTaskResponse,
-  ActionStopSessionResponse,
   BrowserSessionResponse,
   TaskEvent,
   TaskResponse,
@@ -318,10 +317,9 @@ class AsyncSessionHandle(AsyncTaskHandle):
           "name": "close",
         },
       )
-      return ActionStopSessionResponse(**(await cast(asyncio.Future[Any], await self.send_event(event, has_result=True)) or {}))
+      await self.send_event(event, has_result=False)
     else:
       await self._client._delete_task(self._id)
-      return ActionStopSessionResponse()
 
   async def run_task(
     self,

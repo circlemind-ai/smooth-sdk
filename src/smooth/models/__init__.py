@@ -270,12 +270,6 @@ class ActionRunTaskResponse(BaseModel):
   output: Any = Field(description="The task output.")
 
 
-class ActionStopSessionResponse(BaseModel):
-  """Response model for cancel_session action."""
-
-  pass
-
-
 ###############################################################################################################
 # --- Deprecated ---
 ###############################################################################################################
