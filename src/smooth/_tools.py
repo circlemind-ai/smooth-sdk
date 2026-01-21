@@ -36,7 +36,7 @@ class AsyncSmoothTool:
     else:
       return await self._fn(**kwargs)
 
-  async def _handle_tool_response(self, task: "AsyncTaskHandle", event_id: str | None, response: Any) -> Any:
+  async def _handle_tool_response(self, task: "AsyncTaskHandle", event_id: str, response: Any) -> Any:
     if isinstance(response, ToolCallError):
       await task._send_event(
         TaskEvent(
@@ -73,7 +73,7 @@ class AsyncSmoothTool:
         )
       )
 
-  async def __call__(self, task: "AsyncTaskHandle", event_id: str | None, **kwargs: Any) -> Any:
+  async def __call__(self, task: "AsyncTaskHandle", event_id: str, **kwargs: Any) -> Any:
     try:
       response = await self._run_fn(task, **kwargs)
       await self._handle_tool_response(task, event_id, response)
@@ -100,7 +100,7 @@ class SmoothTool(AsyncSmoothTool):
     else:
       return await asyncio.to_thread(self._fn, **kwargs)
 
-  async def __call__(self, task: "TaskHandle", event_id: str | None, **kwargs: Any) -> Any:
+  async def __call__(self, task: "TaskHandle", event_id: str, **kwargs: Any) -> Any:
     try:
       response = await self._run_fn(task, **kwargs)
       await self._handle_tool_response(task._async_handle, event_id, response)

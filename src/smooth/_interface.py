@@ -61,7 +61,8 @@ class AsyncTaskHandle(BaseTaskHandle):
 
     # Events
     self._last_event_t = 0
-    self._event_futures: dict[str | None, asyncio.Future[Any]] = {}
+    self._event_futures: dict[str, asyncio.Future[Any]] = {}
+    self._tool_tasks: dict[str, asyncio.Task[Any]] = {}
 
   # --- Task Methods ---
 
@@ -228,6 +229,14 @@ class AsyncTaskHandle(BaseTaskHandle):
     if self._is_alive != 1:
       return
 
+    async def _run_tool(fn: Coroutine[Any, Any, Any], event_id: str) -> Any:
+      try:
+        return await fn
+      except asyncio.CancelledError:
+        raise
+      finally:
+        self._tool_tasks.pop(event_id, None)
+
     while self._is_alive > 0:
       task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
       self._task_response = task_response
@@ -236,11 +245,13 @@ class AsyncTaskHandle(BaseTaskHandle):
         self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
         for event in task_response.events:
           if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
-            asyncio.create_task(tool(self._task_handle, event.id, **event.payload.get("input", {})))
+            self._tool_tasks[event.id] = asyncio.create_task(
+              _run_tool(tool(self._task_handle, event.id, **event.payload.get("input", {})), event.id)
+            )
           elif event.name == "browser_action":
             future = self._event_futures.get(event.id)
             if future and not future.done():
-              del self._event_futures[event.id]
+              self._event_futures.pop(event.id, None)
               code = event.payload.get("code")
               if code == 200:
                 future.set_result(event.payload.get("output"))
@@ -256,6 +267,11 @@ class AsyncTaskHandle(BaseTaskHandle):
             future.cancel()
         self._event_futures.clear()
 
+        # Cancel all running tool tasks
+        for task in self._tool_tasks.values():
+          if not task.done():
+            task.cancel()
+        self._tool_tasks.clear()
       if self._is_alive > 0:
         await asyncio.sleep(self._poll_interval)
       else:
@@ -414,9 +430,11 @@ class TaskHandle(BaseTaskHandle):
   @deprecated("exec_js is deprecated, use evaluate_js instead")
   def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any:
     """Executes JavaScript code in the browser context."""
+
     # NOTE: this was blocking before, so we keep it that way for backward compatibility
     async def _run() -> Any:
       return await (await self._async_handle.exec_js(code, args))
+
     return self._run_async(_run())
 
 
