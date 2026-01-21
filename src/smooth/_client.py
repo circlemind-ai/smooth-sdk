@@ -1,5 +1,6 @@
 # pyright: reportPrivateUsage=false
 import asyncio
+import inspect
 import io
 import os
 import threading
@@ -286,9 +287,7 @@ class SmoothClient(BaseClient):
         ApiException: If the API request fails.
     """
     custom_tools_ = (
-      [tool if isinstance(tool, SmoothTool) else SmoothTool(**tool) for tool in custom_tools]
-      if custom_tools
-      else None
+      [tool if isinstance(tool, SmoothTool) else SmoothTool(**tool) for tool in custom_tools] if custom_tools else None
     )
 
     async_handle = self._run_async(
@@ -332,6 +331,10 @@ class SmoothClient(BaseClient):
     """Decorator to register a tool function."""
 
     def decorator(func: Callable[..., Any]):
+      if inspect.iscoroutinefunction(func):
+        raise TypeError(
+          f"SmoothClient.tool cannot wrap async function {func.__name__}. Use SmoothAsyncClient if you need async support."
+        )
       tool = SmoothTool(
         signature=ToolSignature(name=name, description=description, inputs=inputs, output=output),
         fn=func,
@@ -724,6 +727,10 @@ class SmoothAsyncClient(BaseClient):
     """Decorator to register an asynchronous tool function."""
 
     def decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
+      if not inspect.iscoroutinefunction(func):
+        raise TypeError(
+          f"SmoothAsyncClient.tool cannot wrap non-async function {func.__name__}. Custom tools must be async."
+        )
       async_tool = AsyncSmoothTool(
         signature=ToolSignature(name=name, description=description, inputs=inputs, output=output),
         fn=func,
