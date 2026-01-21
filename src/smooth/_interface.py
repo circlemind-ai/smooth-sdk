@@ -1,7 +1,7 @@
 # pyright: reportPrivateUsage=false
 import asyncio
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, Coroutine, Sequence, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Coroutine, Sequence, TypeVar
 
 from deprecated import deprecated
 from nanoid import generate
@@ -356,7 +356,7 @@ class AsyncSessionHandle(AsyncTaskHandle):
         },
       },
     )
-    return ActionRunTaskResponse(**(await cast(asyncio.Future[Any], await self._send_event(event, has_result=True)) or {}))
+    return ActionRunTaskResponse(**(await self._send_event(event, has_result=True) or {}))
 
 
 class TaskHandle(BaseTaskHandle):
