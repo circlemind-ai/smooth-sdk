@@ -489,14 +489,6 @@ class SmoothAsyncClient(BaseClient):
     """Exits the asynchronous context manager."""
     await self.close()
 
-  def _get_session(self) -> aiohttp.ClientSession:
-    """Get or create the aiohttp session."""
-    if self._client is None:
-      raise RuntimeError(
-        "Client session not initialized. Use 'async with' context manager or call methods that create the session."
-      )
-    return self._client
-
   async def _ensure_session(self) -> aiohttp.ClientSession:
     """Ensure session exists, creating it if necessary."""
     if self._client is None:
