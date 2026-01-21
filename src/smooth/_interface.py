@@ -1,7 +1,7 @@
 # pyright: reportPrivateUsage=false
 import asyncio
-from contextlib import asynccontextmanager, contextmanager
-from typing import TYPE_CHECKING, Any, Coroutine, TypeVar, cast
+from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING, Any, Coroutine, Sequence, TypeVar, cast
 
 from deprecated import deprecated
 from nanoid import generate
@@ -43,12 +43,18 @@ class BaseTaskHandle:
 class AsyncTaskHandle(BaseTaskHandle):
   """An asynchronous handle to a running task."""
 
-  def __init__(self, task_id: str, client: "SmoothAsyncClient", tools: list["AsyncSmoothTool"] | None = None):
+  def __init__(
+    self,
+    task_id: str,
+    client: "SmoothAsyncClient",
+    tools: Sequence["AsyncSmoothTool"] | None = None,
+    task_handle: Any | None = None,
+  ):
     """Initializes the asynchronous task handle."""
     super().__init__(task_id)
     self._client = client
     self._tools = {tool.name: tool for tool in (tools or [])}
-
+    self._task_handle = task_handle or self  # Use to pass the correct handle to tools
     # Polling
     self._is_alive = 0
     self._poll_interval = 1.0
@@ -158,7 +164,7 @@ class AsyncTaskHandle(BaseTaskHandle):
 
     raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
 
-  async def send_event(self, event: TaskEvent, has_result: bool = False) -> asyncio.Future[Any] | None:
+  async def _send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
     """Sends an event to a running task."""
     event.id = event.id or generate()
     if has_result:
@@ -166,7 +172,7 @@ class AsyncTaskHandle(BaseTaskHandle):
       self._event_futures[event.id] = future
 
       asyncio.create_task(self._client._send_task_event(self._id, event))
-      return future
+      return await future
     else:
       asyncio.create_task(self._client._send_task_event(self._id, event))
       return None
@@ -182,7 +188,7 @@ class AsyncTaskHandle(BaseTaskHandle):
         "input": {"url": url},
       },
     )
-    return ActionGotoResponse(**(await cast(asyncio.Future[Any], await self.send_event(event, has_result=True)) or {}))
+    return ActionGotoResponse(**((await self._send_event(event, has_result=True)) or {}))
 
   async def extract(self, schema: dict[str, Any], prompt: str | None = None):
     """Extracts from the given URL."""
@@ -196,7 +202,7 @@ class AsyncTaskHandle(BaseTaskHandle):
         },
       },
     )
-    return ActionExtractResponse(**(await cast(asyncio.Future[Any], await self.send_event(event, has_result=True)) or {}))
+    return ActionExtractResponse(**((await self._send_event(event, has_result=True)) or {}))
 
   async def evaluate_js(self, code: str, args: dict[str, Any] | None = None):
     """Executes JavaScript code in the browser context."""
@@ -210,7 +216,7 @@ class AsyncTaskHandle(BaseTaskHandle):
         },
       },
     )
-    return ActionEvaluateJSResponse(**(await cast(asyncio.Future[Any], await self.send_event(event, has_result=True)) or {}))
+    return ActionEvaluateJSResponse(**((await self._send_event(event, has_result=True)) or {}))
 
   # --- Private Methods ---
 
@@ -222,23 +228,15 @@ class AsyncTaskHandle(BaseTaskHandle):
     if self._is_alive != 1:
       return
 
-    loop = asyncio.get_running_loop()
     while self._is_alive > 0:
       task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
       self._task_response = task_response
 
-      if task_response.status not in ["running", "waiting"]:
-        if task_response.status != "done":
-          # Cancel all pending futures
-          for future in self._event_futures.values():
-            if not future.done():
-              future.cancel()
-          self._event_futures.clear()
       if task_response.events:
         self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
         for event in task_response.events:
           if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
-            asyncio.run_coroutine_threadsafe(tool(self, event.id, **event.payload.get("input", {})), loop)
+            asyncio.create_task(tool(self._task_handle, event.id, **event.payload.get("input", {})))
           elif event.name == "browser_action":
             future = self._event_futures.get(event.id)
             if future and not future.done():
@@ -250,6 +248,13 @@ class AsyncTaskHandle(BaseTaskHandle):
                 future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
               elif code == 500:
                 future.set_exception(ValueError(event.payload.get("output", "Unknown error.")))
+
+      if task_response.status not in ["running", "waiting"]:
+        # Cancel all pending futures
+        for future in self._event_futures.values():
+          if not future.done():
+            future.cancel()
+        self._event_futures.clear()
 
       if self._is_alive > 0:
         await asyncio.sleep(self._poll_interval)
@@ -289,8 +294,13 @@ class AsyncTaskHandle(BaseTaskHandle):
         },
       },
     )
-    # TODO: This is non-blocking for backward compatibility
-    return cast(asyncio.Future[Any], await self.send_event(event, has_result=True))
+    # TODO: This is non-blocking for backward compatibility (old _send_event)
+    event.id = event.id or generate()
+    future = asyncio.get_running_loop().create_future()
+    self._event_futures[event.id] = future
+
+    asyncio.create_task(self._client._send_task_event(self._id, event))
+    return future
 
 
 class AsyncSessionHandle(AsyncTaskHandle):
@@ -303,7 +313,10 @@ class AsyncSessionHandle(AsyncTaskHandle):
 
   async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
     """Exits the context manager."""
-    await self.close(force=False)
+    if exc_type is None:
+      await self.close(force=False)
+    else:
+      await self.close(force=True)
     self._disconnect()
 
   # --- Session Methods ---
@@ -317,7 +330,7 @@ class AsyncSessionHandle(AsyncTaskHandle):
           "name": "close",
         },
       )
-      await self.send_event(event, has_result=False)
+      await self._send_event(event, has_result=False)
     else:
       await self._client._delete_task(self._id)
 
@@ -343,7 +356,7 @@ class AsyncSessionHandle(AsyncTaskHandle):
         },
       },
     )
-    return ActionRunTaskResponse(**(await cast(asyncio.Future[Any], await self.send_event(event, has_result=True)) or {}))
+    return ActionRunTaskResponse(**(await cast(asyncio.Future[Any], await self._send_event(event, has_result=True)) or {}))
 
 
 class TaskHandle(BaseTaskHandle):
@@ -355,7 +368,7 @@ class TaskHandle(BaseTaskHandle):
     self._client = client
     self._loop = client._loop  # Use client's event loop
 
-    self._async_handle = AsyncTaskHandle(task_id, client._async_client, tools)
+    self._async_handle = AsyncTaskHandle(task_id, client._async_client, tools, self)
 
   def _run_async(self, coro: Coroutine[Any, Any, T]) -> T:
     return self._client._run_async(coro)
@@ -381,17 +394,6 @@ class TaskHandle(BaseTaskHandle):
     """Returns the downloads URL for the task."""
     return self._run_async(self._async_handle.downloads_url(timeout))
 
-  def send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
-    """Sends an event to a running task."""
-    result = self._run_async(self._async_handle.send_event(event, has_result))
-    if has_result and result:
-
-      async def await_future():
-        return await result
-
-      return self._run_async(await_future())
-    return None
-
   def goto(self, url: str) -> Any:
     """Navigates to the given URL."""
     return self._run_async(self._async_handle.goto(url))
@@ -404,16 +406,6 @@ class TaskHandle(BaseTaskHandle):
     """Evaluates JavaScript code in the browser context."""
     return self._run_async(self._async_handle.evaluate_js(code, args))
 
-  @contextmanager
-  def _connection(self):
-    """Context manager to connect to the task."""
-    cm = self._async_handle._connection()
-    self._run_async(cm.__aenter__())
-    try:
-      yield self
-    finally:
-      self._run_async(cm.__aexit__(None, None, None))
-
   @deprecated("update is deprecated, use send_event instead")
   def update(self, payload: TaskUpdateRequest) -> bool:
     """Updates a running task with user input."""
@@ -422,7 +414,10 @@ class TaskHandle(BaseTaskHandle):
   @deprecated("exec_js is deprecated, use evaluate_js instead")
   def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any:
     """Executes JavaScript code in the browser context."""
-    return self._run_async(self._async_handle.exec_js(code, args)).result()
+    # NOTE: this was blocking before, so we keep it that way for backward compatibility
+    async def _run() -> Any:
+      return await (await self._async_handle.exec_js(code, args))
+    return self._run_async(_run())
 
 
 class SessionHandle(TaskHandle):

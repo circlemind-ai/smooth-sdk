@@ -4,7 +4,7 @@ import io
 import os
 import threading
 from pathlib import Path
-from typing import Any, Coroutine, Literal, Type, TypeVar
+from typing import Any, Callable, Coroutine, Literal, Sequence, Type, TypeVar, cast
 
 import aiohttp
 from deprecated import deprecated
@@ -174,6 +174,7 @@ class SmoothClient(BaseClient):
   def session(
     self,
     url: str | None = None,
+    files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
     device: Literal["desktop", "mobile"] = "mobile",
     allowed_urls: list[str] | None = None,
@@ -187,35 +188,36 @@ class SmoothClient(BaseClient):
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
-    custom_tools: list[SmoothTool | dict[str, Any]] | None = None,
+    custom_tools: Sequence[SmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
   ) -> SessionHandle:
     """Opens a browser session."""
     # SmoothTool inherits from AsyncSmoothTool, no unwrapping needed
-    async_session = self._run_async(
-      self._async_client.session(
-        url=url,
-        agent=agent,
-        device=device,
-        allowed_urls=allowed_urls,
-        enable_recording=enable_recording,
-        profile_id=profile_id,
-        profile_read_only=profile_read_only,
-        stealth_mode=stealth_mode,
-        proxy_server=proxy_server,
-        proxy_username=proxy_username,
-        proxy_password=proxy_password,
-        certificates=certificates,
-        use_adblock=use_adblock,
-        additional_tools=additional_tools,
-        custom_tools=custom_tools,
-        experimental_features=experimental_features,
-        extensions=extensions,
-      )
+    task_handle = self.run(
+      task=None,  # type: ignore
+      url=url,
+      files=files,
+      agent=agent,
+      device=device,
+      allowed_urls=allowed_urls,
+      enable_recording=enable_recording,
+      profile_id=profile_id,
+      profile_read_only=profile_read_only,
+      stealth_mode=stealth_mode,
+      proxy_server=proxy_server,
+      proxy_username=proxy_username,
+      proxy_password=proxy_password,
+      certificates=certificates,
+      use_adblock=use_adblock,
+      additional_tools=additional_tools,
+      custom_tools=custom_tools,
+      experimental_features=experimental_features,
+      extensions=extensions,
     )
 
-    return SessionHandle(async_session.id(), self, tools=list(async_session._tools.values()) if async_session._tools else None)
+    tools = cast(dict[str, SmoothTool] | None, task_handle._async_handle._tools)
+    return SessionHandle(task_handle._id, self, tools=list(tools.values()) if tools else None)
 
   def run(
     self,
@@ -239,7 +241,7 @@ class SmoothClient(BaseClient):
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
-    custom_tools: list[SmoothTool | dict[str, Any]] | None = None,
+    custom_tools: Sequence[SmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
   ) -> TaskHandle:
@@ -283,6 +285,12 @@ class SmoothClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
+    custom_tools_ = (
+      [tool if isinstance(tool, SmoothTool) else SmoothTool(**tool) for tool in custom_tools]
+      if custom_tools
+      else None
+    )
+
     async_handle = self._run_async(
       self._async_client.run(
         task=task,
@@ -304,13 +312,13 @@ class SmoothClient(BaseClient):
         certificates=certificates,
         use_adblock=use_adblock,
         additional_tools=additional_tools,
-        custom_tools=custom_tools,
+        custom_tools=custom_tools_,
         experimental_features=experimental_features,
         extensions=extensions,
       )
     )
 
-    return TaskHandle(async_handle._id, self, tools=list(async_handle._tools.values()) if async_handle._tools else None)
+    return TaskHandle(async_handle._id, self, tools=custom_tools_)
 
   def tool(
     self,
@@ -323,7 +331,7 @@ class SmoothClient(BaseClient):
   ):
     """Decorator to register a tool function."""
 
-    def decorator(func: Any):
+    def decorator(func: Callable[..., Any]):
       tool = SmoothTool(
         signature=ToolSignature(name=name, description=description, inputs=inputs, output=output),
         fn=func,
@@ -582,7 +590,7 @@ class SmoothAsyncClient(BaseClient):
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
-    custom_tools: list[AsyncSmoothTool | dict[str, Any]] | None = None,
+    custom_tools: Sequence[AsyncSmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
   ):
@@ -633,7 +641,7 @@ class SmoothAsyncClient(BaseClient):
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
-    custom_tools: list[AsyncSmoothTool | dict[str, Any]] | None = None,
+    custom_tools: Sequence[AsyncSmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
   ) -> AsyncTaskHandle:
@@ -723,7 +731,7 @@ class SmoothAsyncClient(BaseClient):
   ):
     """Decorator to register an asynchronous tool function."""
 
-    def decorator(func: Any):
+    def decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
       async_tool = AsyncSmoothTool(
         signature=ToolSignature(name=name, description=description, inputs=inputs, output=output),
         fn=func,
