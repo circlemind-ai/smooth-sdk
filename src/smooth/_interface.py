@@ -110,7 +110,7 @@ class AsyncTaskHandle(BaseTaskHandle):
 
     raise TimeoutError(f"Live URL not available for task {self.id()}.")
 
-  async def recording_url(self, timeout: int | None = None) -> str:
+  async def recording_url(self, timeout: int | None = 30) -> str:
     """Returns the recording URL for the task."""
     if self._task_response and self._task_response.recording_url is not None:
       return self._task_response.recording_url
@@ -119,24 +119,23 @@ class AsyncTaskHandle(BaseTaskHandle):
     async with self._connection():
       start_time = loop.time()
       while timeout is None or (loop.time() - start_time) < timeout:
-        if self._task_response:
-          if self._task_response.status in ["waiting", "running"]:
-            raise BadRequestError(f"Recording URL not available for task {self.id()} while it is still running.")
-          elif self._task_response.recording_url is not None:
-            if not self._task_response.recording_url:
-              raise ApiError(
-                status_code=404,
-                detail=(
-                  f"Recording URL not available for task {self.id()}."
-                  " Set `enable_recording=True` when creating the task to enable it."
-                ),
-              )
-            return self._task_response.recording_url
+        if self._task_response and self._task_response.recording_url is not None:
+          if not self._task_response.recording_url:
+            raise ApiError(
+              status_code=404,
+              detail=(
+                f"Recording URL not available for task {self.id()}."
+                " Set `enable_recording=True` when creating the task to enable it."
+              ),
+            )
+          return self._task_response.recording_url
         await asyncio.sleep(0.2)
 
+    if self._task_response and self._task_response.status in ["waiting", "running"]:
+      raise BadRequestError(f"Recording URL not available for task {self.id()} while it is still running.")
     raise TimeoutError(f"Recording URL not available for task {self.id()}.")
 
-  async def downloads_url(self, timeout: int | None = None) -> str:
+  async def downloads_url(self, timeout: int | None = 30) -> str:
     """Returns the downloads URL for the task."""
     if self._task_response and self._task_response.downloads_url is not None:
       return self._task_response.downloads_url
@@ -145,24 +144,23 @@ class AsyncTaskHandle(BaseTaskHandle):
     async with self._connection():
       start_time = loop.time()
       while timeout is None or (loop.time() - start_time) < timeout:
-        if self._task_response:
-          if self._task_response.status in ["running", "waiting"]:
-            raise BadRequestError(f"Downloads URL not available for task {self.id()} while it is still running.")
-          else:
-            task_response = await self._client._get_task(self.id(), query_params={"downloads": "true"})
-            if task_response.downloads_url is not None:
-              if not task_response.downloads_url:
-                raise ApiError(
-                  status_code=404,
-                  detail=(
-                    f"Downloads URL not available for task {self.id()}."
-                    " Make sure the task downloaded files during its execution."
-                  ),
-                )
-              return task_response.downloads_url
+        if self._task_response and self._task_response.status not in ["waiting", "running"]:
+          task_response = await self._client._get_task(self.id(), query_params={"downloads": "true"})
+          if task_response.downloads_url is not None:
+            if not task_response.downloads_url:
+              raise ApiError(
+                status_code=404,
+                detail=(
+                  f"Downloads URL not available for task {self.id()}."
+                  " Make sure the task downloaded files during its execution."
+                ),
+              )
+            return task_response.downloads_url
           await asyncio.sleep(0.8)
-      await asyncio.sleep(0.2)
+        await asyncio.sleep(0.2)
 
+    if self._task_response and self._task_response.status in ["waiting", "running"]:
+      raise BadRequestError(f"Downloads URL not available for task {self.id()} while it is still running.")
     raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
 
   async def _send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
@@ -237,45 +235,47 @@ class AsyncTaskHandle(BaseTaskHandle):
       finally:
         self._tool_tasks.pop(event_id, None)
 
-    while self._is_alive > 0:
-      task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
-      self._task_response = task_response
+    self._task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
 
-      if task_response.events:
-        self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
-        for event in task_response.events:
-          if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
-            self._tool_tasks[event.id] = asyncio.create_task(
-              _run_tool(tool(self._task_handle, event.id, **event.payload.get("input", {})), event.id)
-            )
-          elif event.name == "browser_action":
-            future = self._event_futures.get(event.id)
-            if future and not future.done():
-              self._event_futures.pop(event.id, None)
-              code = event.payload.get("code")
-              if code == 200:
-                future.set_result(event.payload.get("output"))
-              elif code == 400:
-                future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
-              elif code == 500:
-                future.set_exception(ValueError(event.payload.get("output", "Unknown error.")))
-
-      if task_response.status not in ["running", "waiting"]:
-        # Cancel all pending futures
-        for future in self._event_futures.values():
-          if not future.done():
-            future.cancel()
-        self._event_futures.clear()
-
-        # Cancel all running tool tasks
-        for task in self._tool_tasks.values():
-          if not task.done():
-            task.cancel()
-        self._tool_tasks.clear()
-      if self._is_alive > 0:
+    async def _poller():
+      while self._is_alive > 0:
         await asyncio.sleep(self._poll_interval)
-      else:
-        break
+
+        task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
+        self._task_response = task_response
+
+        if task_response.events:
+          self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
+          for event in task_response.events:
+            if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
+              self._tool_tasks[event.id] = asyncio.create_task(
+                _run_tool(tool(self._task_handle, event.id, **event.payload.get("input", {})), event.id)
+              )
+            elif event.name == "browser_action":
+              future = self._event_futures.get(event.id)
+              if future and not future.done():
+                self._event_futures.pop(event.id, None)
+                code = event.payload.get("code")
+                if code == 200:
+                  future.set_result(event.payload.get("output"))
+                elif code == 400:
+                  future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
+                elif code == 500:
+                  future.set_exception(ValueError(event.payload.get("output", "Unknown error.")))
+
+        if task_response.status not in ["running", "waiting"]:
+          # Cancel all pending futures
+          for future in self._event_futures.values():
+            if not future.done():
+              future.cancel()
+          self._event_futures.clear()
+
+          # Cancel all running tool tasks
+          for task in self._tool_tasks.values():
+            if not task.done():
+              task.cancel()
+          self._tool_tasks.clear()
+    asyncio.create_task(_poller())
 
   def _disconnect(self):
     """Disconnects the task handle from the task."""
@@ -284,7 +284,7 @@ class AsyncTaskHandle(BaseTaskHandle):
   @asynccontextmanager
   async def _connection(self):
     """Context manager to connect to the task."""
-    asyncio.create_task(self._connect())
+    await self._connect()
     try:
       yield self
     finally:
@@ -324,7 +324,7 @@ class AsyncSessionHandle(AsyncTaskHandle):
 
   async def __aenter__(self):
     """Enters the context manager."""
-    asyncio.create_task(self._connect())
+    await self._connect()
     return self
 
   async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
