@@ -319,8 +319,9 @@ class AsyncTaskHandle(BaseTaskHandle):
     future = asyncio.get_running_loop().create_future()
     self._event_futures[event.id] = future
 
-    asyncio.create_task(self._client._send_task_event(self._id, event))
-    return future
+    async with self._connection():
+      asyncio.create_task(self._client._send_task_event(self._id, event))
+      return future
 
 
 class AsyncSessionHandle(AsyncTaskHandle):
