@@ -1,22 +1,29 @@
 {
   "name": "@circlemind-ai/smooth-ts",
-  "version": "0.3.5",
-  "description": "",
+  "version": "0.4.0",
+  "description": "Smooth TypeScript SDK for browser automation and task execution",
   "main": "smooth.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "smooth",
+    "browser-automation",
+    "ai-agent",
+    "web-scraping"
+  ],
   "author": "Luca Pinchetti",
   "license": "ISC",
   "packageManager": "pnpm@10.20.0",
   "dependencies": {
     "axios": "^1.13.1",
     "form-data": "^4.0.4",
+    "nanoid": "^5.0.9",
     "stream": "^0.0.3",
     "url": "^0.11.4"
   },
   "devDependencies": {
-    "@types/node": "^24.10.0"
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
   }
 }
