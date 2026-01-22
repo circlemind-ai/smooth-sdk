@@ -22,6 +22,7 @@ from .models import (
   BrowserSessionResponse,
   Certificate,
   Extension,
+  ProfileRequest,
   ProfileResponse,
   TaskEvent,
   TaskEventResponse,
@@ -125,53 +126,6 @@ class SmoothClient(BaseClient):
     self._loop_thread = threading.Thread(target=self._run_loop, daemon=True)
     self._loop_thread.start()
 
-  def _run_loop(self):
-    """Run the event loop in a background thread."""
-    asyncio.set_event_loop(self._loop)
-    self._loop.run_forever()
-
-  def _run_async(self, coro: Coroutine[Any, Any, T]) -> T:
-    """Run an async coroutine in the background loop and return the result."""
-    future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-    return future.result()
-
-  def __enter__(self):
-    """Enters the synchronous context manager."""
-    self._run_async(self._async_client.__aenter__())
-    return self
-
-  def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
-    """Exits the synchronous context manager."""
-    self._run_async(self._async_client.__aexit__(exc_type, exc_val, exc_tb))
-
-  def close(self):
-    """Close the client."""
-    self._run_async(self._async_client.close())
-    # Stop the event loop
-    if self._loop.is_running():
-      self._loop.call_soon_threadsafe(self._loop.stop)
-
-  def _submit_task(self, payload: TaskRequest) -> TaskResponse:
-    """Submits a task to be run."""
-    return self._run_async(self._async_client._submit_task(payload))
-
-  def _get_task(self, task_id: str, query_params: dict[str, Any] | None = None) -> TaskResponse:
-    """Retrieves the status and result of a task."""
-    return self._run_async(self._async_client._get_task(task_id, query_params))
-
-  @deprecated("update_task is deprecated")
-  def _update_task(self, task_id: str, payload: TaskUpdateRequest) -> bool:
-    """Updates a running task with user input."""
-    return self._run_async(self._async_client._update_task(task_id, payload))
-
-  def _send_task_event(self, task_id: str, event: TaskEvent) -> TaskEventResponse:
-    """Sends an event to a running task."""
-    return self._run_async(self._async_client._send_task_event(task_id, event))
-
-  def _delete_task(self, task_id: str):
-    """Deletes a task."""
-    self._run_async(self._async_client._delete_task(task_id))
-
   def session(
     self,
     url: str | None = None,
@@ -194,7 +148,6 @@ class SmoothClient(BaseClient):
     extensions: list[str] | None = None,
   ) -> SessionHandle:
     """Opens a browser session."""
-    # SmoothTool inherits from AsyncSmoothTool, no unwrapping needed
     task_handle = self.run(
       task=None,  # type: ignore
       url=url,
@@ -345,20 +298,39 @@ class SmoothClient(BaseClient):
 
     return decorator
 
+  # --- Profile Methods --- #
+
+  def create_profile(self, profile_id: str | None = None) -> ProfileResponse:
+    """Creates a new browser profile.
+
+    Args:
+        profile_id: Optional custom ID for the profile. If not provided, a random ID will be generated.
+
+    Returns:
+        The created browser profile.
+    """
+    return self._run_async(self._async_client.create_profile(profile_id))
+
   def list_profiles(self):
     """Lists all browser profiles for the user.
 
     Returns:
         A list of existing browser profiles.
-
-    Raises:
-        ApiException: If the API request fails.
     """
     return self._run_async(self._async_client.list_profiles())
 
   def delete_profile(self, profile_id: str):
-    """Delete a browser profile."""
-    self._run_async(self._async_client.delete_profile(profile_id))
+    """Delete a browser profile.
+
+    Args:
+        profile_id: The ID of the profile to delete.
+
+    Raises:
+        ApiException: If the API request fails.
+    """
+    return self._run_async(self._async_client.delete_profile(profile_id))
+
+  # --- File Uploads Methods --- #
 
   def upload_file(self, file: io.IOBase, name: str | None = None, purpose: str | None = None) -> UploadFileResponse:
     """Upload a file and return the file ID.
@@ -373,13 +345,15 @@ class SmoothClient(BaseClient):
 
     Raises:
         ValueError: If the file doesn't exist or can't be read.
-        ApiError: If the API request fails.
+        ApiException: If the API request fails.
     """
     return self._run_async(self._async_client.upload_file(file, name, purpose))
 
   def delete_file(self, file_id: str):
     """Delete a file by its ID."""
-    self._run_async(self._async_client.delete_file(file_id))
+    return self._run_async(self._async_client.delete_file(file_id))
+
+  # --- Extension Methods --- #
 
   def upload_extension(self, file: io.IOBase, name: str | None = None) -> UploadExtensionResponse:
     """Upload an extension and return the extension ID."""
@@ -391,7 +365,49 @@ class SmoothClient(BaseClient):
 
   def delete_extension(self, extension_id: str):
     """Delete an extension by its ID."""
-    self._run_async(self._async_client.delete_extension(extension_id))
+    return self._run_async(self._async_client.delete_extension(extension_id))
+
+  # --- Private Methods ---
+
+  def _run_loop(self):
+    """Run the event loop in a background thread."""
+    asyncio.set_event_loop(self._loop)
+    self._loop.run_forever()
+
+  def _run_async(self, coro: Coroutine[Any, Any, T]) -> T:
+    """Run an async coroutine in the background loop and return the result."""
+    future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+    return future.result()
+
+  def __enter__(self):
+    """Enters the synchronous context manager."""
+    self._run_async(self._async_client.__aenter__())
+    return self
+
+  def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
+    """Exits the synchronous context manager."""
+    self._run_async(self._async_client.__aexit__(exc_type, exc_val, exc_tb))
+
+  def _submit_task(self, payload: TaskRequest) -> TaskResponse:
+    """Submits a task to be run."""
+    return self._run_async(self._async_client._submit_task(payload))
+
+  def _get_task(self, task_id: str, query_params: dict[str, Any] | None = None) -> TaskResponse:
+    """Retrieves the status and result of a task."""
+    return self._run_async(self._async_client._get_task(task_id, query_params))
+
+  @deprecated("update_task is deprecated")
+  def _update_task(self, task_id: str, payload: TaskUpdateRequest) -> bool:
+    """Updates a running task with user input."""
+    return self._run_async(self._async_client._update_task(task_id, payload))
+
+  def _send_task_event(self, task_id: str, event: TaskEvent) -> TaskEventResponse:
+    """Sends an event to a running task."""
+    return self._run_async(self._async_client._send_task_event(task_id, event))
+
+  def _delete_task(self, task_id: str):
+    """Deletes a task."""
+    self._run_async(self._async_client._delete_task(task_id))
 
   def __del__(self):
     """Cleanup the event loop when the client is destroyed."""
@@ -482,91 +498,6 @@ class SmoothAsyncClient(BaseClient):
     super().__init__(api_key, base_url, api_version)
     self._timeout = aiohttp.ClientTimeout(total=timeout)
     self._client: aiohttp.ClientSession | None = None
-
-  async def __aenter__(self):
-    """Enters the asynchronous context manager."""
-    self._client = aiohttp.ClientSession(headers=self.headers, timeout=self._timeout)
-    return self
-
-  async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
-    """Exits the asynchronous context manager."""
-    await self.close()
-
-  async def _ensure_session(self) -> aiohttp.ClientSession:
-    """Ensure session exists, creating it if necessary."""
-    if self._client is None:
-      self._client = aiohttp.ClientSession(headers=self.headers, timeout=self._timeout)
-    return self._client
-
-  async def _submit_task(self, payload: TaskRequest) -> TaskResponse:
-    """Submits a task to be run asynchronously."""
-    try:
-      session = await self._ensure_session()
-      async with session.post(f"{self.base_url}/task", json=payload.model_dump()) as response:
-        data = await self._handle_response(response)
-        return TaskResponse(**data["r"])
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def _get_task(self, task_id: str, query_params: dict[str, Any] | None = None) -> TaskResponse:
-    """Retrieves the status and result of a task asynchronously."""
-    if not task_id:
-      raise ValueError("Task ID cannot be empty.")
-
-    try:
-      session = await self._ensure_session()
-      url = f"{self.base_url}/task/{task_id}"
-      async with session.get(url, params=query_params) as response:
-        data = await self._handle_response(response)
-        return TaskResponse(**data["r"])
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def _update_task(self, task_id: str, payload: TaskUpdateRequest) -> bool:
-    """Updates a running task with user input asynchronously."""
-    if not task_id:
-      raise ValueError("Task ID cannot be empty.")
-
-    try:
-      session = await self._ensure_session()
-      async with session.put(f"{self.base_url}/task/{task_id}", json=payload.model_dump()) as response:
-        await self._handle_response(response)
-        return True
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def _send_task_event(self, task_id: str, event: TaskEvent):
-    """Sends an event to a running task asynchronously."""
-    if not task_id:
-      raise ValueError("Task ID cannot be empty.")
-
-    try:
-      session = await self._ensure_session()
-      async with session.post(
-        f"{self.base_url}/task/{task_id}/event",
-        json=event.model_dump(),
-      ) as response:
-        data = await self._handle_response(response)
-        return TaskEventResponse(**data["r"])
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def _delete_task(self, task_id: str):
-    """Deletes a task asynchronously."""
-    if not task_id:
-      raise ValueError("Task ID cannot be empty.")
-
-    try:
-      session = await self._ensure_session()
-      async with session.delete(f"{self.base_url}/task/{task_id}") as response:
-        await self._handle_response(response)
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
   async def session(
     self,
@@ -728,9 +659,7 @@ class SmoothAsyncClient(BaseClient):
 
     def decorator(func: Callable[..., Coroutine[Any, Any, Any]]):
       if not inspect.iscoroutinefunction(func):
-        raise TypeError(
-          f"SmoothAsyncClient.tool cannot wrap non-async function {func.__name__}. Custom tools must be async."
-        )
+        raise TypeError(f"SmoothAsyncClient.tool cannot wrap non-async function {func.__name__}. Custom tools must be async.")
       async_tool = AsyncSmoothTool(
         signature=ToolSignature(name=name, description=description, inputs=inputs, output=output),
         fn=func,
@@ -740,6 +669,35 @@ class SmoothAsyncClient(BaseClient):
       return async_tool
 
     return decorator
+
+  async def close(self):
+    """Closes the async client session."""
+    if self._client is not None:
+      await self._client.close()
+      self._client = None
+
+  # --- Profile Methods --- #
+
+  async def create_profile(self, profile_id: str | None = None) -> ProfileResponse:
+    """Creates a new browser profile.
+
+    Args:
+        profile_id: Optional custom ID for the profile. If not provided, a random ID will be generated.
+
+    Returns:
+        The created browser profile.
+
+    Raises:
+        ApiException: If the API request fails.
+    """
+    try:
+      session = await self._ensure_session()
+      async with session.post(f"{self.base_url}/profile", json=ProfileRequest(id=profile_id).model_dump()) as response:
+        data = await self._handle_response(response)
+        return ProfileResponse(**data["r"])
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
   async def list_profiles(self):
     """Lists all browser profiles for the user.
@@ -752,9 +710,199 @@ class SmoothAsyncClient(BaseClient):
     """
     try:
       session = await self._ensure_session()
-      async with session.get(f"{self.base_url}/browser/profile") as response:
+      async with session.get(f"{self.base_url}/profile") as response:
         data = await self._handle_response(response)
         return [ProfileResponse(**d) for d in data["r"]]
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def delete_profile(self, profile_id: str):
+    """Delete a browser profile.
+
+    Args:
+        profile_id: The ID of the profile to delete.
+
+    Raises:
+        ApiException: If the API request fails.
+    """
+    try:
+      session = await self._ensure_session()
+      async with session.delete(f"{self.base_url}/profile/{profile_id}") as response:
+        await self._handle_response(response)
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  # --- File Uploads Methods --- #
+
+  async def upload_file(self, file: io.IOBase, name: str | None = None, purpose: str | None = None) -> UploadFileResponse:
+    """Upload a file and return the file ID.
+
+    Args:
+        file: File object to be uploaded.
+        name: Optional custom name for the file. If not provided, the original file name will be used.
+        purpose: Optional short description of the file to describe its purpose (i.e., 'the bank statement pdf').
+
+    Returns:
+        The file ID assigned to the uploaded file.
+
+    Raises:
+        ValueError: If the file doesn't exist or can't be read.
+        ApiError: If the API request fails.
+    """
+    try:
+      name = name or getattr(file, "name", None)
+      if name is None:
+        raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
+
+      session = await self._ensure_session()
+      form_data = aiohttp.FormData()
+      form_data.add_field("file", file, filename=Path(name).name)
+      if purpose:
+        form_data.add_field("file_purpose", purpose)
+
+      async with session.post(f"{self.base_url}/file", data=form_data) as response:
+        data = await self._handle_response(response)
+        return UploadFileResponse(**data["r"])
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def delete_file(self, file_id: str):
+    """Delete a file by its ID."""
+    try:
+      session = await self._ensure_session()
+      async with session.delete(f"{self.base_url}/file/{file_id}") as response:
+        await self._handle_response(response)
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  # --- Extension Methods --- #
+
+  async def upload_extension(self, file: io.IOBase, name: str | None = None) -> UploadExtensionResponse:
+    """Upload an extension and return the extension ID."""
+    try:
+      name = name or getattr(file, "name", None)
+      if name is None:
+        raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
+
+      session = await self._ensure_session()
+      form_data = aiohttp.FormData()
+      form_data.add_field("file", file, filename=Path(name).name)
+
+      async with session.post(f"{self.base_url}/extension", data=form_data) as response:
+        data = await self._handle_response(response)
+        return UploadExtensionResponse(**data["r"])
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def list_extensions(self):
+    """List all extensions."""
+    try:
+      session = await self._ensure_session()
+      async with session.get(f"{self.base_url}/extension") as response:
+        data = await self._handle_response(response)
+        return [Extension(**d) for d in data["r"]]
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def delete_extension(self, extension_id: str):
+    """Delete an extension by its ID."""
+    try:
+      session = await self._ensure_session()
+      async with session.delete(f"{self.base_url}/extension/{extension_id}") as response:
+        await self._handle_response(response)
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  # --- Private Methods ---
+
+  async def __aenter__(self):
+    """Enters the asynchronous context manager."""
+    self._client = aiohttp.ClientSession(headers=self.headers, timeout=self._timeout)
+    return self
+
+  async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
+    """Exits the asynchronous context manager."""
+    await self.close()
+
+  async def _ensure_session(self) -> aiohttp.ClientSession:
+    """Ensure session exists, creating it if necessary."""
+    if self._client is None:
+      self._client = aiohttp.ClientSession(headers=self.headers, timeout=self._timeout)
+    return self._client
+
+  async def _submit_task(self, payload: TaskRequest) -> TaskResponse:
+    """Submits a task to be run asynchronously."""
+    try:
+      session = await self._ensure_session()
+      async with session.post(f"{self.base_url}/task", json=payload.model_dump()) as response:
+        data = await self._handle_response(response)
+        return TaskResponse(**data["r"])
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def _get_task(self, task_id: str, query_params: dict[str, Any] | None = None) -> TaskResponse:
+    """Retrieves the status and result of a task asynchronously."""
+    if not task_id:
+      raise ValueError("Task ID cannot be empty.")
+
+    try:
+      session = await self._ensure_session()
+      url = f"{self.base_url}/task/{task_id}"
+      async with session.get(url, params=query_params) as response:
+        data = await self._handle_response(response)
+        return TaskResponse(**data["r"])
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def _update_task(self, task_id: str, payload: TaskUpdateRequest) -> bool:
+    """Updates a running task with user input asynchronously."""
+    if not task_id:
+      raise ValueError("Task ID cannot be empty.")
+
+    try:
+      session = await self._ensure_session()
+      async with session.put(f"{self.base_url}/task/{task_id}", json=payload.model_dump()) as response:
+        await self._handle_response(response)
+        return True
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def _send_task_event(self, task_id: str, event: TaskEvent):
+    """Sends an event to a running task asynchronously."""
+    if not task_id:
+      raise ValueError("Task ID cannot be empty.")
+
+    try:
+      session = await self._ensure_session()
+      async with session.post(
+        f"{self.base_url}/task/{task_id}/event",
+        json=event.model_dump(),
+      ) as response:
+        data = await self._handle_response(response)
+        return TaskEventResponse(**data["r"])
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  async def _delete_task(self, task_id: str):
+    """Deletes a task asynchronously."""
+    if not task_id:
+      raise ValueError("Task ID cannot be empty.")
+
+    try:
+      session = await self._ensure_session()
+      async with session.delete(f"{self.base_url}/task/{task_id}") as response:
+        await self._handle_response(response)
     except aiohttp.ClientError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
@@ -830,105 +978,7 @@ class SmoothAsyncClient(BaseClient):
     """Lists all browser profiles for the user."""
     return await self.list_profiles()
 
-  async def delete_profile(self, profile_id: str):
-    """Delete a browser profile."""
-    try:
-      session = await self._ensure_session()
-      async with session.delete(f"{self.base_url}/browser/profile/{profile_id}") as response:
-        await self._handle_response(response)
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
   @deprecated("delete_session is deprecated, use delete_profile instead")
   async def delete_session(self, session_id: str):
     """Delete a browser profile."""
     await self.delete_profile(session_id)
-
-  async def upload_file(self, file: io.IOBase, name: str | None = None, purpose: str | None = None) -> UploadFileResponse:
-    """Upload a file and return the file ID.
-
-    Args:
-        file: File object to be uploaded.
-        name: Optional custom name for the file. If not provided, the original file name will be used.
-        purpose: Optional short description of the file to describe its purpose (i.e., 'the bank statement pdf').
-
-    Returns:
-        The file ID assigned to the uploaded file.
-
-    Raises:
-        ValueError: If the file doesn't exist or can't be read.
-        ApiError: If the API request fails.
-    """
-    try:
-      name = name or getattr(file, "name", None)
-      if name is None:
-        raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
-
-      session = await self._ensure_session()
-      form_data = aiohttp.FormData()
-      form_data.add_field("file", file, filename=Path(name).name)
-      if purpose:
-        form_data.add_field("file_purpose", purpose)
-
-      async with session.post(f"{self.base_url}/file", data=form_data) as response:
-        data = await self._handle_response(response)
-        return UploadFileResponse(**data["r"])
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def delete_file(self, file_id: str):
-    """Delete a file by its ID."""
-    try:
-      session = await self._ensure_session()
-      async with session.delete(f"{self.base_url}/file/{file_id}") as response:
-        await self._handle_response(response)
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def upload_extension(self, file: io.IOBase, name: str | None = None) -> UploadExtensionResponse:
-    """Upload an extension and return the extension ID."""
-    try:
-      name = name or getattr(file, "name", None)
-      if name is None:
-        raise ValueError("File name must be provided or the file object must have a 'name' attribute.")
-
-      session = await self._ensure_session()
-      form_data = aiohttp.FormData()
-      form_data.add_field("file", file, filename=Path(name).name)
-
-      async with session.post(f"{self.base_url}/browser/extension", data=form_data) as response:
-        data = await self._handle_response(response)
-        return UploadExtensionResponse(**data["r"])
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def list_extensions(self):
-    """List all extensions."""
-    try:
-      session = await self._ensure_session()
-      async with session.get(f"{self.base_url}/browser/extension") as response:
-        data = await self._handle_response(response)
-        return [Extension(**d) for d in data["r"]]
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def delete_extension(self, extension_id: str):
-    """Delete an extension by its ID."""
-    try:
-      session = await self._ensure_session()
-      async with session.delete(f"{self.base_url}/browser/extension/{extension_id}") as response:
-        await self._handle_response(response)
-    except aiohttp.ClientError as e:
-      logger.error(f"Request failed: {e}")
-      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  async def close(self):
-    """Closes the async client session."""
-    if self._client is not None:
-      await self._client.close()
-      self._client = None
