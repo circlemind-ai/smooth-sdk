@@ -246,25 +246,33 @@ class Extension(BaseModel):
 ###############################################################################################################
 
 
-class ActionGotoResponse(BaseModel):
+class BaseActionResponse(BaseModel):
+  """Base response model for actions."""
+
+  pass
+  # credits_used: int = Field(default=0, description="The amount of credits used to perform the action.")
+  # duration: float = Field(default=0.0, description="The duration taken to perform the action.")  # TODO
+
+
+class ActionGotoResponse(BaseActionResponse):
   """Response model for goto action."""
 
   pass
 
 
-class ActionExtractResponse(BaseModel):
+class ActionExtractResponse(BaseActionResponse):
   """Response model for extract action."""
 
-  data: Any = Field(description="The extracted data.")
+  output: Any = Field(description="The extracted data.")
 
 
-class ActionEvaluateJSResponse(BaseModel):
+class ActionEvaluateJSResponse(BaseActionResponse):
   """Response model for evaluate_js action."""
 
-  result: Any = Field(description="The result of the JavaScript evaluation.")
+  output: Any = Field(description="The result of the JavaScript evaluation.")
 
 
-class ActionRunTaskResponse(BaseModel):
+class ActionRunTaskResponse(BaseActionResponse):
   """Response model for run_task action."""
 
   output: Any = Field(description="The task output.")
