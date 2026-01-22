@@ -58,6 +58,7 @@ class AsyncTaskHandle(BaseTaskHandle):
     # Polling
     self._is_alive = 0
     self._poll_interval = 1.0
+    self._polling_task: asyncio.Task[Any] | None = None
 
     # Events
     self._last_event_t = 0
@@ -171,7 +172,8 @@ class AsyncTaskHandle(BaseTaskHandle):
       self._event_futures[event.id] = future
 
       await self._client._send_task_event(self._id, event)
-      return await future
+      async with self._connection():
+        return await future
     else:
       await self._client._send_task_event(self._id, event)
       return None
@@ -275,11 +277,13 @@ class AsyncTaskHandle(BaseTaskHandle):
             if not task.done():
               task.cancel()
           self._tool_tasks.clear()
-    asyncio.create_task(_poller())
+    self._polling_task = asyncio.create_task(_poller())
 
   def _disconnect(self):
     """Disconnects the task handle from the task."""
     self._is_alive = 0 if self._is_alive < 1 else self._is_alive - 1
+    if self._is_alive == 0 and self._polling_task and not self._polling_task.done():
+      self._polling_task.cancel()
 
   @asynccontextmanager
   async def _connection(self):
