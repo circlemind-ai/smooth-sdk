@@ -2,21 +2,33 @@
 """Smooth python SDK."""
 
 from ._client import SmoothAsyncClient, SmoothClient
-from ._exceptions import ApiError, TimeoutError, ToolCallError
+from ._exceptions import ApiError, BadRequestError, TimeoutError, ToolCallError
 from ._interface import (
+  AsyncSessionHandle,
   AsyncTaskHandle,
   BrowserSessionHandle,
+  SessionHandle,
   TaskHandle,
+)
+from ._tools import (
+  AsyncSmoothTool,
+  SmoothTool,
 )
 
 # Export public API
 __all__ = [
   "SmoothClient",
   "SmoothAsyncClient",
+  "SessionHandle",
+  "AsyncSessionHandle",
+  "AsyncSmoothTool",
+  "SmoothTool",
+  "ApiError",
+  "BadRequestError",
+  "TimeoutError",
+  "ToolCallError",
+  # Deprecated
   "TaskHandle",
   "AsyncTaskHandle",
   "BrowserSessionHandle",
-  "ApiError",
-  "TimeoutError",
-  "ToolCallError",
 ]
