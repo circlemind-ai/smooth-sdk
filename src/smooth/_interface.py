@@ -333,7 +333,6 @@ class AsyncSessionHandle(AsyncTaskHandle):
       await self.close(force=False)
     else:
       await self.close(force=True)
-    self._disconnect()
 
   # --- Session Methods ---
 
@@ -349,6 +348,7 @@ class AsyncSessionHandle(AsyncTaskHandle):
       await self._send_event(event, has_result=False)
     else:
       await self._client._delete_task(self._id)
+    self._disconnect()
 
   async def run_task(
     self,
