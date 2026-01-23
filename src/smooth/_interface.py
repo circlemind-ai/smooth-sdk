@@ -189,7 +189,7 @@ class AsyncTaskHandle(BaseTaskHandle):
         "input": {"url": url},
       },
     )
-    return ActionGotoResponse(**((await self._send_event(event, has_result=True)) or {}))
+    return ActionGotoResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
 
   async def extract(self, schema: dict[str, Any], prompt: str | None = None):
     """Extracts from the given URL."""
@@ -203,7 +203,7 @@ class AsyncTaskHandle(BaseTaskHandle):
         },
       },
     )
-    return ActionExtractResponse(**((await self._send_event(event, has_result=True)) or {}))
+    return ActionExtractResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
 
   async def evaluate_js(self, code: str, args: dict[str, Any] | None = None):
     """Executes JavaScript code in the browser context."""
@@ -217,7 +217,7 @@ class AsyncTaskHandle(BaseTaskHandle):
         },
       },
     )
-    return ActionEvaluateJSResponse(**((await self._send_event(event, has_result=True)) or {}))
+    return ActionEvaluateJSResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
 
   # --- Private Methods ---
 
@@ -376,7 +376,7 @@ class AsyncSessionHandle(AsyncTaskHandle):
         },
       },
     )
-    return ActionRunTaskResponse(**(await self._send_event(event, has_result=True) or {}))
+    return ActionRunTaskResponse(**(await self._send_event(event, has_result=True) or {}))  # type: ignore
 
 
 class TaskHandle(BaseTaskHandle):
