@@ -249,6 +249,8 @@ class AsyncTaskHandle(BaseTaskHandle):
         if task_response.events:
           self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
           for event in task_response.events:
+            if not event.id:
+              continue
             if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
               self._tool_tasks[event.id] = asyncio.create_task(
                 _run_tool(tool(self._task_handle, event.id, **event.payload.get("input", {})), event.id)
