@@ -2,7 +2,6 @@
 """Smooth python SDK types and models."""
 
 import warnings
-from decimal import Decimal
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
@@ -251,7 +250,7 @@ class BaseActionResponse(BaseModel):
   """Base response model for actions."""
 
   credits_used: int = Field(default=0, description="The amount of credits used to perform the action.")
-  duration: Decimal = Field(default=Decimal(0.0), description="The duration taken to perform the action.")
+  duration: int = Field(default=0, description="The duration taken to perform the action.")
 
 
 class ActionGotoResponse(BaseActionResponse):
