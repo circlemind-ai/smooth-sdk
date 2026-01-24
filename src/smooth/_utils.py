@@ -1,6 +1,7 @@
 import base64
 import io
 import logging
+import os
 import urllib.parse
 from typing import Any
 
@@ -8,6 +9,7 @@ from .models import Certificate
 
 # Configure logging
 logger = logging.getLogger("smooth")
+logger.setLevel(os.getenv("SMOOTH_LOG_LEVEL", "WARNING").upper())
 
 
 def encode_url(url: str, interactive: bool = True, embed: bool = False) -> str:

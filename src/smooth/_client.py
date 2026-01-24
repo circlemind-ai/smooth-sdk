@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable, Coroutine, Literal, Sequence, Type, TypeVar, cast
 
 import aiohttp
+from aiohttp_retry import ExponentialRetry, RetryClient
 from deprecated import deprecated
 from pydantic import BaseModel
 
@@ -116,10 +117,19 @@ class SmoothClient(BaseClient):
     base_url: str = BASE_URL,
     api_version: str = "v1",
     timeout: int = 30,
+    retries: int = 0,
   ):
-    """Initializes the synchronous client."""
+    """Initializes the synchronous client.
+
+    Args:
+        api_key: API key for authentication.
+        base_url: Base URL for the API.
+        api_version: API version.
+        timeout: Request timeout in seconds.
+        retries: Number of retry attempts for failed requests (0 to disable).
+    """
     super().__init__(api_key, base_url, api_version)
-    self._async_client = SmoothAsyncClient(api_key, base_url, api_version, timeout)
+    self._async_client = SmoothAsyncClient(api_key, base_url, api_version, timeout, retries)
 
     # Create persistent event loop in background thread
     self._loop = asyncio.new_event_loop()
@@ -493,11 +503,22 @@ class SmoothAsyncClient(BaseClient):
     base_url: str = BASE_URL,
     api_version: str = "v1",
     timeout: int = 30,
+    retries: int = 0,
   ):
-    """Initializes the asynchronous client."""
+    """Initializes the asynchronous client.
+
+    Args:
+        api_key: API key for authentication.
+        base_url: Base URL for the API.
+        api_version: API version.
+        timeout: Request timeout in seconds.
+        retries: Number of retry attempts for failed requests (0 to disable).
+    """
     super().__init__(api_key, base_url, api_version)
     self._timeout = aiohttp.ClientTimeout(total=timeout)
+    self._retries = retries
     self._client: aiohttp.ClientSession | None = None
+    self._retry_client: RetryClient | None = None
 
   async def session(
     self,
@@ -672,6 +693,9 @@ class SmoothAsyncClient(BaseClient):
 
   async def close(self):
     """Closes the async client session."""
+    if self._retry_client is not None:
+      await self._retry_client.close()
+      self._retry_client = None
     if self._client is not None:
       await self._client.close()
       self._client = None
@@ -825,17 +849,23 @@ class SmoothAsyncClient(BaseClient):
   async def __aenter__(self):
     """Enters the asynchronous context manager."""
     self._client = aiohttp.ClientSession(headers=self.headers, timeout=self._timeout)
+    if self._retries > 0:
+      retry_options = ExponentialRetry(attempts=self._retries + 1, start_timeout=0.5, max_timeout=10.0)
+      self._retry_client = RetryClient(client_session=self._client, retry_options=retry_options)
     return self
 
   async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
     """Exits the asynchronous context manager."""
     await self.close()
 
-  async def _ensure_session(self) -> aiohttp.ClientSession:
+  async def _ensure_session(self) -> aiohttp.ClientSession | RetryClient:
     """Ensure session exists, creating it if necessary."""
     if self._client is None:
       self._client = aiohttp.ClientSession(headers=self.headers, timeout=self._timeout)
-    return self._client
+      if self._retries > 0:
+        retry_options = ExponentialRetry(attempts=self._retries + 1, start_timeout=0.5, max_timeout=10.0)
+        self._retry_client = RetryClient(client_session=self._client, retry_options=retry_options)
+    return self._retry_client if self._retry_client else self._client
 
   async def _submit_task(self, payload: TaskRequest) -> TaskResponse:
     """Submits a task to be run asynchronously."""
