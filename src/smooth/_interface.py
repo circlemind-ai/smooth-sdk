@@ -242,48 +242,52 @@ class AsyncTaskHandle(BaseTaskHandle):
 
     async def _poller():
       poller_id = generate()
-      logger.debug(f"Starting poller {poller_id} for task {self.id()}")
       try:
-        while self._is_alive > 0:
-          logger.debug(f"{poller_id} - polling")
-          await asyncio.sleep(self._poll_interval)
+        logger.debug(f"Starting poller {poller_id} for task {self.id()}")
+        try:
+          while self._is_alive > 0:
+            logger.debug(f"{poller_id} - polling")
+            await asyncio.sleep(self._poll_interval)
 
-          task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
-          self._task_response = task_response
+            task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
+            self._task_response = task_response
 
-          if task_response.status not in ["running", "waiting"]:
-            raise RuntimeError("Task is not running.")
-          elif task_response.events:
-            self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
-            for event in task_response.events:
-              if not event.id:
-                continue
-              if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
-                self._tool_tasks[event.id] = asyncio.create_task(
-                  _run_tool(tool(self._task_handle, event.id, **event.payload.get("input", {})), event.id)
-                )
-              elif event.name == "browser_action":
-                future = self._event_futures.get(event.id)
-                if future and not future.done():
-                  self._event_futures.pop(event.id, None)
-                  code = event.payload.get("code")
-                  if code == 200:
-                    future.set_result(event.payload.get("output"))
-                  elif code == 400:
-                    future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
-                  elif code == 500:
-                    future.set_exception(RuntimeError(event.payload.get("output", "Unknown error.")))
+            if task_response.status not in ["running", "waiting"]:
+              raise RuntimeError("Task is not running.")
+            elif task_response.events:
+              self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
+              for event in task_response.events:
+                if not event.id:
+                  continue
+                if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
+                  self._tool_tasks[event.id] = asyncio.create_task(
+                    _run_tool(tool(self._task_handle, event.id, **event.payload.get("input", {})), event.id)
+                  )
+                elif event.name == "browser_action":
+                  future = self._event_futures.get(event.id)
+                  if future and not future.done():
+                    self._event_futures.pop(event.id, None)
+                    code = event.payload.get("code")
+                    if code == 200:
+                      future.set_result(event.payload.get("output"))
+                    elif code == 400:
+                      future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
+                    elif code == 500:
+                      future.set_exception(RuntimeError(event.payload.get("output", "Unknown error.")))
 
-          for task in self._tool_tasks.values():
-            if task.done():
-              await task
-      except asyncio.CancelledError:
-        logger.debug("Poller %s for task %s cancelled", poller_id, self.id())
-      finally:
+            for task in self._tool_tasks.values():
+              if task.done():
+                await task
+        except asyncio.CancelledError:
+          logger.debug("Poller %s for task %s cancelled", poller_id, self.id())
+          raise
+      except Exception as e:
+        self._is_alive = 0
+
         # Cancel all pending futures
         for future in self._event_futures.values():
           if not future.done():
-            future.cancel()
+            future.set_exception(e)
         self._event_futures.clear()
 
         # Cancel all running tool tasks
