@@ -9,6 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validat
 # --- Models ---
 
 
+DeviceType = Literal["desktop", "mobile", "desktop-lg"]
+
+
 class Certificate(BaseModel):
   """Client certificate for accessing secure websites.
 
@@ -77,7 +80,7 @@ class TaskRequest(BaseModel):
     le=128,
     description="Maximum number of steps the agent can take (min 2, max 128).",
   )
-  device: Literal["desktop", "mobile"] = Field(default="desktop", description="Device type for the task. Default is desktop.")
+  device: DeviceType = Field(default="desktop", description="Device type for the task. Default is desktop.")
   allowed_urls: list[str] | None = Field(
     default=None,
     description=(
@@ -179,7 +182,7 @@ class TaskResponse(BaseModel):
   status: Literal["waiting", "running", "done", "failed", "cancelled"] = Field(description="The status of the task.")
   output: Any | None = Field(default=None, description="The output of the task.")
   credits_used: int | None = Field(default=None, description="The amount of credits used to perform the task.")
-  device: Literal["desktop", "mobile"] | None = Field(default=None, description="The device type used for the task.")
+  device: DeviceType | None = Field(default=None, description="The device type used for the task.")
   live_url: str | None = Field(
     default=None,
     description="The URL to view and interact with the task execution.",
@@ -327,7 +330,7 @@ class BrowserSessionRequest(BaseModel):
     default=True,
     description="Request a live URL to interact with the browser session.",
   )
-  device: Literal["desktop", "mobile"] | None = Field(default="desktop", description="The device type to use.")
+  device: DeviceType | None = Field(default="desktop", description="The device type to use.")
   url: str | None = Field(default=None, description="The URL to open in the browser session.")
   proxy_server: str | None = Field(
     default=None,
