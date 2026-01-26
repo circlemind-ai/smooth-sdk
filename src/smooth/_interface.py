@@ -244,6 +244,7 @@ class AsyncTaskHandle(BaseTaskHandle):
       logger.debug(f"Starting poller {poller_id} for task {self.id()}")
       try:
         while self._is_alive > 0:
+          logger.debug(f"{poller_id} - polling")
           await asyncio.sleep(self._poll_interval)
 
           task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
@@ -268,7 +269,7 @@ class AsyncTaskHandle(BaseTaskHandle):
                   elif code == 400:
                     future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
                   elif code == 500:
-                    future.set_exception(ValueError(event.payload.get("output", "Unknown error.")))
+                    future.set_exception(RuntimeError(event.payload.get("output", "Unknown error.")))
 
           if task_response.status not in ["running", "waiting"]:
             # Cancel all pending futures

@@ -117,7 +117,7 @@ class SmoothClient(BaseClient):
     base_url: str = BASE_URL,
     api_version: str = "v1",
     timeout: int = 30,
-    retries: int = 0,
+    retries: int = 3,
   ):
     """Initializes the synchronous client.
 
@@ -503,7 +503,7 @@ class SmoothAsyncClient(BaseClient):
     base_url: str = BASE_URL,
     api_version: str = "v1",
     timeout: int = 30,
-    retries: int = 0,
+    retries: int = 3,
   ):
     """Initializes the asynchronous client.
 
