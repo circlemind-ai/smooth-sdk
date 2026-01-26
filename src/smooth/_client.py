@@ -518,7 +518,7 @@ class SmoothAsyncClient(BaseClient):
     super().__init__(api_key, base_url, api_version)
     self._timeout = aiohttp.ClientTimeout(total=timeout)
     self._retries = retries
-    self._client: aiohttp.ClientSession | None = None
+    self._client: aiohttp.ClientSession | RetryClient | None = None
     self._retry_client: RetryClient | None = None
 
   async def session(
@@ -851,7 +851,12 @@ class SmoothAsyncClient(BaseClient):
     """Enters the asynchronous context manager."""
     self._client = aiohttp.ClientSession(headers=self.headers, timeout=self._timeout)
     if self._retries > 0:
-      retry_options = ExponentialRetry(attempts=self._retries + 1, start_timeout=0.5, max_timeout=10.0)
+      retry_options = ExponentialRetry(
+        attempts=self._retries + 1,
+        start_timeout=0.5,
+        max_timeout=10.0,
+        exceptions={aiohttp.ServerDisconnectedError, aiohttp.ClientConnectorError, ConnectionResetError},
+      )
       self._retry_client = RetryClient(client_session=self._client, retry_options=retry_options)
     return self
 
@@ -862,10 +867,8 @@ class SmoothAsyncClient(BaseClient):
   async def _ensure_session(self) -> aiohttp.ClientSession | RetryClient:
     """Ensure session exists, creating it if necessary."""
     if self._client is None:
-      self._client = aiohttp.ClientSession(headers=self.headers, timeout=self._timeout)
-      if self._retries > 0:
-        retry_options = ExponentialRetry(attempts=self._retries + 1, start_timeout=0.5, max_timeout=10.0)
-        self._retry_client = RetryClient(client_session=self._client, retry_options=retry_options)
+      await self.__aenter__()
+    self._client = cast(aiohttp.ClientSession | RetryClient, self._client)
     return self._retry_client if self._retry_client else self._client
 
   async def _submit_task(self, payload: TaskRequest) -> TaskResponse:
