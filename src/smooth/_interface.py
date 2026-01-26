@@ -250,7 +250,9 @@ class AsyncTaskHandle(BaseTaskHandle):
           task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
           self._task_response = task_response
 
-          if task_response.events:
+          if task_response.status not in ["running", "waiting"]:
+            raise RuntimeError("Task is not running.")
+          elif task_response.events:
             self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
             for event in task_response.events:
               if not event.id:
@@ -271,24 +273,23 @@ class AsyncTaskHandle(BaseTaskHandle):
                   elif code == 500:
                     future.set_exception(RuntimeError(event.payload.get("output", "Unknown error.")))
 
-          if task_response.status not in ["running", "waiting"]:
-            # Cancel all pending futures
-            for future in self._event_futures.values():
-              if not future.done():
-                future.cancel()
-            self._event_futures.clear()
-
-            # Cancel all running tool tasks
-            for task in self._tool_tasks.values():
-              if not task.done():
-                task.cancel()
-            self._tool_tasks.clear()
-          else:
-            for task in self._tool_tasks.values():
-              if task.done():
-                await task
+          for task in self._tool_tasks.values():
+            if task.done():
+              await task
       except asyncio.CancelledError:
         logger.debug("Poller %s for task %s cancelled", poller_id, self.id())
+      finally:
+        # Cancel all pending futures
+        for future in self._event_futures.values():
+          if not future.done():
+            future.cancel()
+        self._event_futures.clear()
+
+        # Cancel all running tool tasks
+        for task in self._tool_tasks.values():
+          if not task.done():
+            task.cancel()
+        self._tool_tasks.clear()
       logger.debug("Poller %s for task %s stopped", poller_id, self.id())
     self._polling_task = asyncio.create_task(_poller())
 
