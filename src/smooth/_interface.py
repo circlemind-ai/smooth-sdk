@@ -1,5 +1,6 @@
 # pyright: reportPrivateUsage=false
 import asyncio
+import random
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Coroutine, Sequence, TypeVar
 
@@ -291,6 +292,8 @@ class AsyncTaskHandle(BaseTaskHandle):
             task.cancel()
         self._tool_tasks.clear()
       logger.debug("Poller %s for task %s stopped", poller_id, self.id())
+
+    await asyncio.sleep(random.uniform(0, self._poll_interval))  # Stagger pollers
     self._polling_task = asyncio.create_task(_poller())
 
   def _disconnect(self):
