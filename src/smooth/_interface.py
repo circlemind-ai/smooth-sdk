@@ -284,7 +284,7 @@ class AsyncTaskHandle(BaseTaskHandle):
       except Exception as e:
         self._is_alive = 0
 
-        # Cancel all pending futures
+        # Stop all pending futures
         for future in self._event_futures.values():
           if not future.done():
             future.set_exception(e)
