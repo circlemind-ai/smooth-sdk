@@ -263,24 +263,24 @@ async def download_files(args: argparse.Namespace):
     print_error(f"Unexpected error: {str(e)}")
 
 
-async def recording_url(args: argparse.Namespace):
-  """Get the recording URL for a session."""
-  try:
-    async with SmoothAsyncClient() as client:
-      task_handle = AsyncTaskHandle(args.session_id, client)
-      rec_url = await task_handle.recording_url(timeout=30)
+# async def recording_url(args: argparse.Namespace):
+#   """Get the recording URL for a session."""
+#   try:
+#     async with SmoothAsyncClient() as client:
+#       task_handle = AsyncTaskHandle(args.session_id, client)
+#       rec_url = await task_handle.recording_url(timeout=30)
 
-      print(f"Recording URL for session '{args.session_id}':")
-      print(rec_url)
-      print("\nOpen this URL to view the recording.")
+#       print(f"Recording URL for session '{args.session_id}':")
+#       print(rec_url)
+#       print("\nOpen this URL to view the recording.")
 
-      if args.json:
-        print_json({"session_id": args.session_id, "recording_url": rec_url})
+#       if args.json:
+#         print_json({"session_id": args.session_id, "recording_url": rec_url})
 
-  except ApiError as e:
-    print_error(f"Failed to get recording: {e.detail}")
-  except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+#   except ApiError as e:
+#     print_error(f"Failed to get recording: {e.detail}")
+#   except Exception as e:
+#     print_error(f"Unexpected error: {str(e)}")
 
 
 async def extract(args: argparse.Namespace):
@@ -430,10 +430,10 @@ def main():
   live_parser.set_defaults(func=live_view)
 
   # recording-url command
-  recording_parser = subparsers.add_parser("recording-url", help="Get recording URL for a session")
-  recording_parser.add_argument("session_id", help="Session ID to get recording for")
-  recording_parser.add_argument("--json", action="store_true", help="Output as JSON")
-  recording_parser.set_defaults(func=recording_url)
+  # recording_parser = subparsers.add_parser("recording-url", help="Get recording URL for a session")
+  # recording_parser.add_argument("session_id", help="Session ID to get recording for")
+  # recording_parser.add_argument("--json", action="store_true", help="Output as JSON")
+  # recording_parser.set_defaults(func=recording_url)
 
   # downloads command
   download_parser = subparsers.add_parser("downloads", help="Get download URL for files from a session")

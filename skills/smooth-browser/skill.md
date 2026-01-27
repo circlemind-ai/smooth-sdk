@@ -263,19 +263,6 @@ smooth run <session-id> "Now navigate to the dashboard and export data"
 
 ---
 
-### Get Session Recording
-
-View a video recording of what happened in the session:
-
-```bash
-smooth recording-url <session-id>
-# Open the URL to view the recording
-```
-
-**Note:** Recording is disabled by default (for performance). Enable it with the SDK if needed.
-
----
-
 ### Direct Browser Actions
 
 **Extract data from current page:**

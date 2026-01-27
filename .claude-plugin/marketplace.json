@@ -1,0 +1,21 @@
+{
+  "name": "smooth-browser-marketplace",
+  "owner": {
+    "name": "Circlemind",
+    "email": "support@circlemind.com"
+  },
+  "plugins": [
+    {
+      "name": "smooth-browser",
+      "source": "./",
+      "description": "Browser automation skill with persistent page state for developers and AI agents",
+      "strict": false,
+      "keywords": ["browser", "browser navigation", "automation", "scrape", "debugging"],
+      "skills": ["./skills/smooth-browser"]
+    }
+  ],
+  "metadata": {
+    "description": "Marketplace for the smooth-browser skill",
+    "version": "1.0.1"
+  }
+}
