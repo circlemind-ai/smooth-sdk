@@ -365,7 +365,7 @@ class AsyncSessionHandle(AsyncTaskHandle):
     """Closes the session."""
     if not force:
       event = TaskEvent(
-        name="browser_action",
+        name="session_action",
         payload={
           "name": "close",
         },
@@ -385,7 +385,7 @@ class AsyncSessionHandle(AsyncTaskHandle):
   ):
     """Extracts from the given URL."""
     event = TaskEvent(
-      name="browser_action",
+      name="session_action",
       payload={
         "name": "run_task",
         "input": {
