@@ -263,7 +263,7 @@ class AsyncTaskHandle(BaseTaskHandle):
                   self._tool_tasks[event.id] = asyncio.create_task(
                     _run_tool(tool(self._task_handle, event.id, **event.payload.get("input", {})), event.id)
                   )
-                elif event.name == "browser_action":
+                elif event.name in ["browser_action", "session_action"]:
                   future = self._event_futures.get(event.id)
                   if future and not future.done():
                     self._event_futures.pop(event.id, None)

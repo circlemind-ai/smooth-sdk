@@ -1,0 +1,3 @@
+[submodule "modules/docs"]
+	path = modules/docs
+	url = https://github.com/circlemind-ai/docs.git
