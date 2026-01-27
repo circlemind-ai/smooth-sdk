@@ -10,6 +10,14 @@ from typing import Any, cast
 from smooth import SmoothAsyncClient
 from smooth._exceptions import ApiError
 from smooth._interface import AsyncSessionHandle, AsyncTaskHandle
+from smooth._proxy import (
+  TunnelConfig,
+  clear_proxy_state,
+  get_proxy_credentials,
+  is_proxy_running,
+  load_proxy_state,
+  run_proxy_server,
+)
 
 
 def print_json(data: Any):
@@ -124,6 +132,17 @@ async def start_session(args: argparse.Namespace):
     if args.files:
       files = [f.strip() for f in args.files.split(",")]
 
+    # Check for proxy credentials
+    proxy_server = None
+    proxy_username = None
+    proxy_password = None
+    proxy_credentials = get_proxy_credentials()
+    if proxy_credentials:
+      proxy_server = proxy_credentials.url
+      proxy_username = proxy_credentials.username
+      proxy_password = proxy_credentials.password
+      print(f"Using proxy: {proxy_credentials.url}")
+
     task_handle = await client.session(
       url=args.url,
       files=files,
@@ -134,6 +153,9 @@ async def start_session(args: argparse.Namespace):
       enable_recording=False,  # Disabled by default
       stealth_mode=True,  # Enabled by default
       use_adblock=True,  # Enabled by default
+      proxy_server=proxy_server,
+      proxy_username=proxy_username,
+      proxy_password=proxy_password,
     )
 
     session_id = task_handle.id()
@@ -350,6 +372,77 @@ async def evaluate_js(args: argparse.Namespace):
     print_error(f"Unexpected error: {str(e)}")
 
 
+def start_proxy(args: argparse.Namespace):
+  """Start a local proxy with public tunnel exposure."""
+  # Check if proxy is already running
+  if is_proxy_running():
+    creds = load_proxy_state()
+    if creds:
+      print("Proxy is already running!")
+      print(f"  URL:      {creds.url}")
+      print(f"  Username: {creds.username}")
+      print(f"  Password: {creds.password}")
+      print(f"  PID:      {creds.pid}")
+    return
+
+  config = TunnelConfig(
+    provider=args.provider,
+    port=args.port,
+    timeout=args.timeout,
+    verbose=args.verbose,
+    tcp=args.tcp,
+  )
+
+  # Run the proxy server (blocking)
+  run_proxy_server(config)
+
+
+def stop_proxy(args: argparse.Namespace):
+  """Stop a running proxy."""
+  if not is_proxy_running():
+    print("No proxy is currently running.")
+    return
+
+  creds = load_proxy_state()
+  if creds and creds.pid:
+    try:
+      os.kill(creds.pid, 15)  # SIGTERM
+      print(f"Sent stop signal to proxy (PID: {creds.pid})")
+    except ProcessLookupError:
+      print("Proxy process not found (may have already stopped)")
+    except PermissionError:
+      print_error(f"Permission denied to stop proxy (PID: {creds.pid})")
+
+  clear_proxy_state()
+  print("Proxy state cleared.")
+
+
+def proxy_status(args: argparse.Namespace):
+  """Show the status of the proxy."""
+  if is_proxy_running():
+    creds = load_proxy_state()
+    if creds:
+      print("Proxy is running!")
+      print(f"  URL:      {creds.url}")
+      print(f"  Username: {creds.username}")
+      print(f"  Password: {creds.password}")
+      print(f"  PID:      {creds.pid}")
+      if args.json:
+        print_json(
+          {
+            "running": True,
+            "url": creds.url,
+            "username": creds.username,
+            "password": creds.password,
+            "pid": creds.pid,
+          }
+        )
+  else:
+    print("No proxy is currently running.")
+    if args.json:
+      print_json({"running": False})
+
+
 def main():
   """Main CLI entry point."""
   parser = argparse.ArgumentParser(
@@ -394,6 +487,7 @@ def main():
   start_session_parser.add_argument("--profile-id", help="Profile ID to use")
   start_session_parser.add_argument("--profile-read-only", action="store_true", help="Load profile in read-only mode")
   start_session_parser.add_argument("--url", help="Starting URL for the session")
+  start_session_parser.add_argument("--files", help="Comma-separated list of file IDs to make available in session")
   start_session_parser.add_argument(
     "--device", choices=["mobile", "desktop"], default="mobile", help="Device type (default: mobile)"
   )
@@ -458,6 +552,29 @@ def main():
   evaluate_js_parser.add_argument("--json", action="store_true", help="Output as JSON")
   evaluate_js_parser.set_defaults(func=evaluate_js)
 
+  # start-proxy command
+  start_proxy_parser = subparsers.add_parser("start-proxy", help="Start a local proxy with public tunnel exposure")
+  start_proxy_parser.add_argument(
+    "--provider",
+    choices=["cloudflare", "serveo", "microsoft"],
+    default="cloudflare",
+    help="Tunnel provider (default: cloudflare)",
+  )
+  start_proxy_parser.add_argument("--port", type=int, default=8888, help="Local port (default: 8888)")
+  start_proxy_parser.add_argument("--timeout", type=int, default=30, help="Tunnel timeout in seconds (default: 30)")
+  start_proxy_parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
+  start_proxy_parser.add_argument("--tcp", action="store_true", help="Use TCP mode (serveo only)")
+  start_proxy_parser.set_defaults(func=start_proxy)
+
+  # stop-proxy command
+  stop_proxy_parser = subparsers.add_parser("stop-proxy", help="Stop a running proxy")
+  stop_proxy_parser.set_defaults(func=stop_proxy)
+
+  # proxy-status command
+  proxy_status_parser = subparsers.add_parser("proxy-status", help="Show the status of the proxy")
+  proxy_status_parser.add_argument("--json", action="store_true", help="Output as JSON")
+  proxy_status_parser.set_defaults(func=proxy_status)
+
   # Parse arguments
   args = parser.parse_args()
 
@@ -465,9 +582,13 @@ def main():
     parser.print_help()
     sys.exit(1)
 
-  # Run the appropriate async function
+  # Run the appropriate function (sync for proxy commands, async for others)
   if hasattr(args, "func"):
-    asyncio.run(args.func(args))
+    func = args.func
+    if asyncio.iscoroutinefunction(func):
+      asyncio.run(func(args))
+    else:
+      func(args)
   else:
     parser.print_help()
     sys.exit(1)

@@ -338,6 +338,61 @@ smooth delete-file <file-id>
 
 ---
 
+## Proxy Support
+
+Use a local proxy with public tunnel exposure for sessions that need to appear from your own network.
+
+### Start a Proxy
+
+```bash
+smooth start-proxy
+```
+
+**Options:**
+- `--provider cloudflare|serveo|microsoft` - Tunnel provider (default: cloudflare)
+- `--port PORT` - Local port (default: 8888)
+- `--timeout SECONDS` - Tunnel startup timeout (default: 30)
+- `--verbose` - Enable verbose output
+- `--tcp` - Use TCP mode (serveo only)
+
+The proxy runs in the foreground and outputs credentials. Keep this terminal open.
+
+### Check Proxy Status
+
+```bash
+smooth proxy-status
+```
+
+### Stop the Proxy
+
+Either press `Ctrl+C` in the proxy terminal, or from another terminal:
+
+```bash
+smooth stop-proxy
+```
+
+### Automatic Proxy Usage
+
+When a proxy is running, `smooth start-session` automatically uses it:
+
+```bash
+# In terminal 1: Start proxy
+smooth start-proxy
+
+# In terminal 2: Sessions use the proxy automatically
+smooth start-session --url "https://example.com"
+# Output: "Using proxy: https://..."
+```
+
+### Proxy Requirements
+
+The proxy feature requires additional packages:
+```bash
+pip install pproxy flaredantic
+```
+
+---
+
 ## Best Practices
 
 1. **Always save session IDs** - You'll need them for subsequent commands
@@ -383,5 +438,10 @@ smooth delete-file <file-id>
 - `smooth live-view <session-id>` - Get interactive live URL
 - `smooth recording-url <session-id>` - Get recording URL
 - `smooth downloads <session-id>` - Get downloads URL
+
+### Proxy Commands
+- `smooth start-proxy [OPTIONS]` - Start a local proxy with tunnel
+- `smooth stop-proxy` - Stop the running proxy
+- `smooth proxy-status` - Show proxy status and credentials
 
 All commands support `--json` flag for JSON output.
