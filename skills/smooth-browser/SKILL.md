@@ -3,9 +3,9 @@ name: smooth-browser
 description: Browser automation for AI agents to carry out any task on the web. Use when you need to navigate websites, fill forms, take screenshots, extract web data, test web apps, or automate browser workflows. Trigger phrases include "go to [url]", "click on", "fill out the form", "take a screenshot", "scrape", "automate", "test the website", "log into", or any browser interaction request.
 ---
 
-# Smooth Browser Automation
+# Smooth Browser
 
-A powerful browser automation tool that lets AI agents interact with websites, authenticate, scrape data, and perform complex workflows.
+A browser for AI agents interact with websites, authenticate, scrape data, and perform complex workflows.
 
 ## Prerequisites
 

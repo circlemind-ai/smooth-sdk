@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import sys
+from pathlib import Path
 from typing import Any, cast
 
 from smooth import SmoothAsyncClient, SmoothClient
@@ -31,11 +32,49 @@ def print_error(message: str):
   sys.exit(1)
 
 
+def get_config_path() -> Path:
+  """Get the path to the config file."""
+  return Path.home() / ".smooth" / "config.json"
+
+
+def load_config() -> dict[str, Any]:
+  """Load configuration from ~/.smooth/config.json."""
+  config_path = get_config_path()
+  if config_path.exists():
+    try:
+      with open(config_path) as f:
+        return json.load(f)
+    except (json.JSONDecodeError, IOError):
+      return {}
+  return {}
+
+
+def save_config(config: dict[str, Any]):
+  """Save configuration to ~/.smooth/config.json."""
+  config_path = get_config_path()
+  config_path.parent.mkdir(parents=True, exist_ok=True)
+  with open(config_path, "w") as f:
+    json.dump(config, f, indent=2)
+
+
+def load_config_to_env():
+  """Load API key from config file into environment if not already set."""
+  if not os.getenv("CIRCLEMIND_API_KEY"):
+    config = load_config()
+    api_key = config.get("api_key")
+    if api_key:
+      os.environ["CIRCLEMIND_API_KEY"] = api_key
+
+
 def load_api_key():
   """Load API key from environment."""
   api_key = os.getenv("CIRCLEMIND_API_KEY")
   if not api_key:
-    print_error("CIRCLEMIND_API_KEY environment variable not set")
+    print_error(
+      "API key not configured.\n"
+      "  1. Get your free API key from https://app.smooth.sh/\n"
+      "  2. Run: smooth config --api-key <your-key>"
+    )
   return api_key
 
 
@@ -175,8 +214,10 @@ async def start_session(args: argparse.Namespace):
       if args.json:
         print_json({"session_id": session_id})
 
-    # Don't close the client - session stays alive
-    print("\nSession is running. Use 'smooth close session <session-id>' to close it.")
+    # Close the HTTP client (browser session keeps running on server)
+    await client.close()
+
+    print("\nSession is running. Use 'smooth close-session <session-id>' to close it.")
 
   except ApiError as e:
     print_error(f"Failed to start session: {e.detail}")
@@ -408,6 +449,8 @@ def start_proxy(args: argparse.Namespace):
       verbose=args.verbose,
     )
 
+    print(f"Proxy config: {proxy_config}")
+
     # Save state for CLI management
     from smooth._proxy import ProxyCredentials
 
@@ -457,8 +500,39 @@ def proxy_status(args: argparse.Namespace):
       print_json({"running": False})
 
 
+def config_command(args: argparse.Namespace):
+  """Configure the Smooth CLI."""
+  config = load_config()
+
+  if args.api_key:
+    config["api_key"] = args.api_key
+    save_config(config)
+    print("API key saved successfully!")
+    print(f"Config file: {get_config_path()}")
+  elif args.show:
+    if not config:
+      print("No configuration found.")
+    else:
+      print(f"Config file: {get_config_path()}")
+      if "api_key" in config:
+        # Mask the API key for security
+        masked_key = config["api_key"][:8] + "..." + config["api_key"][-4:] if len(config["api_key"]) > 12 else "***"
+        print(f"API key: {masked_key}")
+      if args.json:
+        # Show full key in JSON output
+        print_json(config)
+  else:
+    # No arguments, show help
+    print("Usage:")
+    print("  smooth config --api-key <key>  Save your API key")
+    print("  smooth config --show           Show current configuration")
+
+
 def main():
   """Main CLI entry point."""
+  # Load API key from config file into environment
+  load_config_to_env()
+
   parser = argparse.ArgumentParser(
     prog="smooth",
     description="Browser automation for AI agents",
@@ -466,6 +540,13 @@ def main():
   )
 
   subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+  # config command
+  config_parser = subparsers.add_parser("config", help="Configure the Smooth CLI")
+  config_parser.add_argument("--api-key", help="Set your API key")
+  config_parser.add_argument("--show", action="store_true", help="Show current configuration")
+  config_parser.add_argument("--json", action="store_true", help="Output as JSON")
+  config_parser.set_defaults(func=config_command)
 
   # create-profile command
   create_profile_parser = subparsers.add_parser("create-profile", help="Create a new browser profile")
@@ -591,6 +672,13 @@ def main():
   if not args.command:
     parser.print_help()
     sys.exit(1)
+
+  # Commands that don't require an API key
+  no_api_key_commands = {"config"}
+
+  # Check for API key if required
+  if args.command not in no_api_key_commands:
+    load_api_key()
 
   # Run the appropriate function (sync for proxy commands, async for others)
   if hasattr(args, "func"):
