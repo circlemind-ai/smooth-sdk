@@ -26,10 +26,27 @@ def print_json(data: Any):
   print(json.dumps(data, indent=2, default=str))
 
 
-def print_error(message: str):
-  """Print error message to stderr."""
-  print(f"Error: {message}", file=sys.stderr)
+def print_success(message: str, data: dict[str, Any] | None = None):
+  """Print success response as JSON."""
+  result = {"success": True, "message": message}
+  if data:
+    result.update(data)
+  print_json(result)
+
+
+def print_error_json(message: str):
+  """Print error response as JSON to stderr and exit."""
+  print(json.dumps({"success": False, "error": message}, indent=2, default=str), file=sys.stderr)
   sys.exit(1)
+
+
+def print_error(message: str, json_mode: bool = False):
+  """Print error message to stderr."""
+  if json_mode:
+    print_error_json(message)
+  else:
+    print(f"Error: {message}", file=sys.stderr)
+    sys.exit(1)
 
 
 def get_config_path() -> Path:
@@ -83,14 +100,15 @@ async def create_profile(args: argparse.Namespace):
   try:
     async with SmoothAsyncClient() as client:
       profile = await client.create_profile(profile_id=args.profile_id)
-      print("Profile created successfully!")
-      print(f"Profile ID: {profile.id}")
       if args.json:
-        print_json({"id": profile.id})
+        print_success("Profile created successfully", {"profile_id": profile.id})
+      else:
+        print("Profile created successfully!")
+        print(f"Profile ID: {profile.id}")
   except ApiError as e:
-    print_error(f"Failed to create profile: {e.detail}")
+    print_error(f"Failed to create profile: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def list_profiles(args: argparse.Namespace):
@@ -99,7 +117,10 @@ async def list_profiles(args: argparse.Namespace):
     async with SmoothAsyncClient() as client:
       profiles = await client.list_profiles()
       if args.json:
-        print_json([{"id": p.id} for p in profiles])
+        print_success(
+          f"Found {len(profiles)} profile(s)",
+          {"profiles": [{"id": p.id} for p in profiles], "count": len(profiles)}
+        )
       else:
         if not profiles:
           print("No profiles found.")
@@ -108,9 +129,9 @@ async def list_profiles(args: argparse.Namespace):
           for profile in profiles:
             print(f"  - {profile.id}")
   except ApiError as e:
-    print_error(f"Failed to list profiles: {e.detail}")
+    print_error(f"Failed to list profiles: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def delete_profile(args: argparse.Namespace):
@@ -118,11 +139,14 @@ async def delete_profile(args: argparse.Namespace):
   try:
     async with SmoothAsyncClient() as client:
       await client.delete_profile(args.profile_id)
-      print(f"Profile '{args.profile_id}' deleted successfully!")
+      if args.json:
+        print_success(f"Profile '{args.profile_id}' deleted successfully", {"profile_id": args.profile_id})
+      else:
+        print(f"Profile '{args.profile_id}' deleted successfully!")
   except ApiError as e:
-    print_error(f"Failed to delete profile: {e.detail}")
+    print_error(f"Failed to delete profile: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def upload_file(args: argparse.Namespace):
@@ -131,16 +155,17 @@ async def upload_file(args: argparse.Namespace):
     async with SmoothAsyncClient() as client:
       with open(args.file_path, "rb") as f:
         result = await client.upload_file(f, name=args.name, purpose=args.purpose)
-        print("File uploaded successfully!")
-        print(f"File ID: {result.id}")
         if args.json:
-          print_json({"file_id": result.id, "name": args.name or args.file_path})
+          print_success("File uploaded successfully", {"file_id": result.id, "name": args.name or args.file_path})
+        else:
+          print("File uploaded successfully!")
+          print(f"File ID: {result.id}")
   except FileNotFoundError:
-    print_error(f"File not found: {args.file_path}")
+    print_error(f"File not found: {args.file_path}", json_mode=args.json)
   except ApiError as e:
-    print_error(f"Failed to upload file: {e.detail}")
+    print_error(f"Failed to upload file: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def delete_file(args: argparse.Namespace):
@@ -148,11 +173,14 @@ async def delete_file(args: argparse.Namespace):
   try:
     async with SmoothAsyncClient() as client:
       await client.delete_file(args.file_id)
-      print(f"File '{args.file_id}' deleted successfully!")
+      if args.json:
+        print_success(f"File '{args.file_id}' deleted successfully", {"file_id": args.file_id})
+      else:
+        print(f"File '{args.file_id}' deleted successfully!")
   except ApiError as e:
-    print_error(f"Failed to delete file: {e.detail}")
+    print_error(f"Failed to delete file: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def start_session(args: argparse.Namespace):
@@ -180,7 +208,8 @@ async def start_session(args: argparse.Namespace):
       proxy_server = proxy_credentials.url
       proxy_username = proxy_credentials.username
       proxy_password = proxy_credentials.password
-      print(f"Using proxy: {proxy_credentials.url}")
+      if not args.json:
+        print(f"Using proxy: {proxy_credentials.url}")
 
     task_handle = await client.session(
       url=args.url,
@@ -199,30 +228,38 @@ async def start_session(args: argparse.Namespace):
     )
 
     session_id = task_handle.id()
-    print("Session started successfully!")
-    print(f"Session ID: {session_id}")
 
     # Get live URL
+    live_url = None
     try:
       live_url = await task_handle.live_url(interactive=True, timeout=30)
-      print(f"Live URL: {live_url}")
-
-      if args.json:
-        print_json({"session_id": session_id, "live_url": live_url})
     except Exception as e:
-      print(f"Warning: Could not get live URL: {e}")
-      if args.json:
-        print_json({"session_id": session_id})
+      if not args.json:
+        print(f"Warning: Could not get live URL: {e}")
 
     # Close the HTTP client (browser session keeps running on server)
     await client.close()
 
-    print("\nSession is running. Use 'smooth close-session <session-id>' to close it.")
+    if args.json:
+      result = {
+        "success": True,
+        "message": "Session started successfully",
+        "session_id": session_id,
+      }
+      if live_url:
+        result["live_url"] = live_url
+      print_json(result)
+    else:
+      print("Session started successfully!")
+      print(f"Session ID: {session_id}")
+      if live_url:
+        print(f"Live URL: {live_url}")
+      print("\nSession is running. Use 'smooth close-session <session-id>' to close it.")
 
   except ApiError as e:
-    print_error(f"Failed to start session: {e.detail}")
+    print_error(f"Failed to start session: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def close_session(args: argparse.Namespace):
@@ -231,15 +268,21 @@ async def close_session(args: argparse.Namespace):
     async with SmoothAsyncClient() as client:
       session_handle = AsyncSessionHandle(args.session_id, client)
       await session_handle.close(force=args.force)
-      print(f"Session '{args.session_id}' closed successfully!")
-      if args.force:
-        print("Note: Session forcefully terminated. Wait 5 seconds for the profile to save cookies and state.")
+      if args.json:
+        print_success(
+          f"Session '{args.session_id}' closed successfully",
+          {"session_id": args.session_id, "force": args.force}
+        )
       else:
-        print("Note: Graceful close initiated. Wait 5 seconds for the profile to save cookies and state.")
+        print(f"Session '{args.session_id}' closed successfully!")
+        if args.force:
+          print("Note: Session forcefully terminated. Wait 5 seconds for the profile to save cookies and state.")
+        else:
+          print("Note: Graceful close initiated. Wait 5 seconds for the profile to save cookies and state.")
   except ApiError as e:
-    print_error(f"Failed to close session: {e.detail}")
+    print_error(f"Failed to close session: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def run_task(args: argparse.Namespace):
@@ -262,7 +305,8 @@ async def run_task(args: argparse.Namespace):
         print_error("Invalid JSON for --response-model")
 
     async with SmoothAsyncClient() as client:
-      print(f"Running task in session '{args.session_id}': {args.task}")
+      if not args.json:
+        print(f"Running task in session '{args.session_id}': {args.task}")
 
       session_handle = AsyncSessionHandle(args.session_id, client)
 
@@ -274,17 +318,17 @@ async def run_task(args: argparse.Namespace):
           response_model=response_model,
           max_steps=args.max_steps,
         )
-        print("\nTask completed. Result:")
         if args.json:
-          print_json(result.output)
+          print_success("Task completed successfully", {"session_id": args.session_id, "result": result.output})
         else:
+          print("\nTask completed. Result:")
           print(result.output)
       except Exception as e:
-        print_error(f"Failed to run task: {str(e)}")
+        print_error(f"Failed to run task: {str(e)}", json_mode=args.json)
   except ApiError as e:
-    print_error(f"Failed to run task: {e.detail}")
+    print_error(f"Failed to run task: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def live_view(args: argparse.Namespace):
@@ -294,17 +338,20 @@ async def live_view(args: argparse.Namespace):
       session_handle = AsyncSessionHandle(args.session_id, client)
       live_url = await session_handle.live_url(interactive=True, timeout=30)
 
-      print(f"Live view URL for session '{args.session_id}':")
-      print(live_url)
-      print("\nOpen this URL in your browser to view and interact with the session.")
-
       if args.json:
-        print_json({"session_id": args.session_id, "live_url": live_url})
+        print_success(
+          "Live view URL retrieved",
+          {"session_id": args.session_id, "live_url": live_url}
+        )
+      else:
+        print(f"Live view URL for session '{args.session_id}':")
+        print(live_url)
+        print("\nOpen this URL in your browser to view and interact with the session.")
 
   except ApiError as e:
-    print_error(f"Failed to get live view: {e.detail}")
+    print_error(f"Failed to get live view: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def download_files(args: argparse.Namespace):
@@ -314,17 +361,20 @@ async def download_files(args: argparse.Namespace):
       task_handle = AsyncTaskHandle(args.session_id, client)
       downloads_url = await task_handle.downloads_url(timeout=30)
 
-      print(f"Downloads URL for session '{args.session_id}':")
-      print(downloads_url)
-      print("\nDownload the files from this URL.")
-
       if args.json:
-        print_json({"session_id": args.session_id, "downloads_url": downloads_url})
+        print_success(
+          "Downloads URL retrieved",
+          {"session_id": args.session_id, "downloads_url": downloads_url}
+        )
+      else:
+        print(f"Downloads URL for session '{args.session_id}':")
+        print(downloads_url)
+        print("\nDownload the files from this URL.")
 
   except ApiError as e:
-    print_error(f"Failed to get downloads: {e.detail}")
+    print_error(f"Failed to get downloads: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 # async def recording_url(args: argparse.Namespace):
@@ -365,24 +415,27 @@ async def extract(args: argparse.Namespace):
 
       # Navigate to URL if provided
       if args.url:
-        print(f"Navigating to {args.url}...")
+        if not args.json:
+          print(f"Navigating to {args.url}...")
         await session_handle.goto(args.url)
-        print("Waiting 5 seconds for page to load...")
+        if not args.json:
+          print("Waiting 5 seconds for page to load...")
         await asyncio.sleep(5)
 
-      print(f"Extracting data from session '{args.session_id}'...")
+      if not args.json:
+        print(f"Extracting data from session '{args.session_id}'...")
       result = await session_handle.extract(schema=cast(dict[str, Any], schema), prompt=args.prompt)
 
-      print("\nExtracted data:")
       if args.json:
-        print_json(result.output)
+        print_success("Data extracted successfully", {"session_id": args.session_id, "data": result.output})
       else:
+        print("\nExtracted data:")
         print(result.output)
 
   except ApiError as e:
-    print_error(f"Failed to extract data: {e.detail}")
+    print_error(f"Failed to extract data: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 async def evaluate_js(args: argparse.Namespace):
@@ -399,19 +452,20 @@ async def evaluate_js(args: argparse.Namespace):
     async with SmoothAsyncClient() as client:
       session_handle = AsyncSessionHandle(args.session_id, client)
 
-      print(f"Executing JavaScript in session '{args.session_id}'...")
+      if not args.json:
+        print(f"Executing JavaScript in session '{args.session_id}'...")
       result = await session_handle.evaluate_js(code=args.code, args=js_args)
 
-      print("\nResult:")
       if args.json:
-        print_json(result.output)
+        print_success("JavaScript executed successfully", {"session_id": args.session_id, "result": result.output})
       else:
+        print("\nResult:")
         print(result.output)
 
   except ApiError as e:
-    print_error(f"Failed to evaluate JavaScript: {e.detail}")
+    print_error(f"Failed to evaluate JavaScript: {e.detail}", json_mode=args.json)
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}")
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 def start_proxy(args: argparse.Namespace):
@@ -459,7 +513,7 @@ def start_proxy(args: argparse.Namespace):
       username=proxy_config["proxy_username"],
       password=proxy_config["proxy_password"],
       local_port=args.port,
-      pid=None,  # Not needed for CLI state
+      pid=os.getpid(),  # Store PID so proxy-status can detect running proxy
     )
     save_proxy_state(credentials)
 
@@ -481,12 +535,9 @@ def proxy_status(args: argparse.Namespace):
   if is_proxy_running():
     creds = load_proxy_state()
     if creds:
-      print("Proxy is running!")
-      print(f"  URL:      {creds.url}")
-      print(f"  Username: {creds.username}")
-      print(f"  Password: {creds.password}")
       if args.json:
-        print_json(
+        print_success(
+          "Proxy is running",
           {
             "running": True,
             "url": creds.url,
@@ -494,10 +545,16 @@ def proxy_status(args: argparse.Namespace):
             "password": creds.password,
           }
         )
+      else:
+        print("Proxy is running!")
+        print(f"  URL:      {creds.url}")
+        print(f"  Username: {creds.username}")
+        print(f"  Password: {creds.password}")
   else:
-    print("No proxy is currently running.")
     if args.json:
-      print_json({"running": False})
+      print_json({"success": True, "message": "No proxy is currently running", "running": False})
+    else:
+      print("No proxy is currently running.")
 
 
 def config_command(args: argparse.Namespace):
@@ -507,20 +564,23 @@ def config_command(args: argparse.Namespace):
   if args.api_key:
     config["api_key"] = args.api_key
     save_config(config)
-    print("API key saved successfully!")
-    print(f"Config file: {get_config_path()}")
-  elif args.show:
-    if not config:
-      print("No configuration found.")
+    if args.json:
+      print_success("API key saved successfully", {"config_file": str(get_config_path())})
     else:
+      print("API key saved successfully!")
       print(f"Config file: {get_config_path()}")
-      if "api_key" in config:
-        # Mask the API key for security
-        masked_key = config["api_key"][:8] + "..." + config["api_key"][-4:] if len(config["api_key"]) > 12 else "***"
-        print(f"API key: {masked_key}")
-      if args.json:
-        # Show full key in JSON output
-        print_json(config)
+  elif args.show:
+    if args.json:
+      print_success("Configuration retrieved", {"config": config})
+    else:
+      if not config:
+        print("No configuration found.")
+      else:
+        print(f"Config file: {get_config_path()}")
+        if "api_key" in config:
+          # Mask the API key for security
+          masked_key = config["api_key"][:8] + "..." + config["api_key"][-4:] if len(config["api_key"]) > 12 else "***"
+          print(f"API key: {masked_key}")
   else:
     # No arguments, show help
     print("Usage:")
@@ -562,6 +622,7 @@ def main():
   # delete-profile command
   delete_profile_parser = subparsers.add_parser("delete-profile", help="Delete a browser profile")
   delete_profile_parser.add_argument("profile_id", help="Profile ID to delete")
+  delete_profile_parser.add_argument("--json", action="store_true", help="Output as JSON")
   delete_profile_parser.set_defaults(func=delete_profile)
 
   # upload-file command
@@ -575,6 +636,7 @@ def main():
   # delete-file command
   delete_file_parser = subparsers.add_parser("delete-file", help="Delete an uploaded file")
   delete_file_parser.add_argument("file_id", help="File ID to delete")
+  delete_file_parser.add_argument("--json", action="store_true", help="Output as JSON")
   delete_file_parser.set_defaults(func=delete_file)
 
   # start-session command
@@ -599,6 +661,7 @@ def main():
   close_session_parser.add_argument(
     "--force", action="store_true", help="Force close the session immediately (default is graceful close)"
   )
+  close_session_parser.add_argument("--json", action="store_true", help="Output as JSON")
   close_session_parser.set_defaults(func=close_session, force=False)
 
   # run command

@@ -187,8 +187,9 @@ class LocalProxy:
 
         def run_proxy():
           asyncio.set_event_loop(loop)
+
           try:
-            handler = loop.run_until_complete(server.start_server({"listen": None}))  # type: ignore
+            handler = loop.run_until_complete(server.start_server({"rserver": []}))  # type: ignore
             self._state.proxy_started.set()  # Signal successful start
             try:
               loop.run_forever()
@@ -297,6 +298,7 @@ def load_proxy_state() -> ProxyCredentials | None:
   try:
     with open(PROXY_STATE_FILE) as f:
       data = json.load(f)
+      data["proxy_server"] = data["proxy_server"].replace("https://", "http://")
     return ProxyCredentials.from_dict(data)
   except Exception:
     return None
