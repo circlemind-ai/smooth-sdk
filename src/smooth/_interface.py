@@ -106,8 +106,11 @@ class AsyncTaskHandle(BaseTaskHandle):
     async with self._connection():
       start_time = loop.time()
       while timeout is None or (loop.time() - start_time) < timeout:
-        if self._task_response and self._task_response.live_url:
-          return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+        if self._task_response:
+          if self._task_response.live_url:
+            return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
+          elif self._task_response.status not in ["waiting", "running"]:
+            raise BadRequestError(f"Live URL not available for task {self.id()} as it is not running.")
         await asyncio.sleep(0.2)
 
     raise TimeoutError(f"Live URL not available for task {self.id()}.")
