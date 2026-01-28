@@ -130,6 +130,10 @@ class TaskRequest(BaseModel):
     default=None, description="Experimental features to enable for the task."
   )
   extensions: list[str] | None = Field(default=None, description="List of extensions to install for the task.")
+  show_cursor: bool = Field(
+    default=False,
+    description="Show mouse cursor. Default is False.",
+  )
 
   @model_validator(mode="before")
   @classmethod

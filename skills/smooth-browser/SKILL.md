@@ -344,7 +344,10 @@ Use a local proxy with public tunnel exposure for sessions that need to appear f
 
 ### Start a Proxy
 
+**Important:** The proxy runs as a **blocking foreground process**. You must run it in a **background terminal** or use a terminal multiplexer (tmux/screen) to keep it running while you use other smooth commands.
+
 ```bash
+# Start in a dedicated terminal (blocks until stopped with Ctrl+C)
 smooth start-proxy
 ```
 
@@ -353,45 +356,47 @@ smooth start-proxy
 - `--port PORT` - Local port (default: 8888)
 - `--timeout SECONDS` - Tunnel startup timeout (default: 30)
 - `--verbose` - Enable verbose output
-- `--tcp` - Use TCP mode (serveo only)
 
-The proxy runs in the foreground and outputs credentials. Keep this terminal open.
+The command will block. **Keep this terminal open** while using the proxy.
+
+**Example - Using with tmux:**
+```bash
+# Start proxy in background tmux session
+tmux new-session -d -s smooth-proxy 'smooth start-proxy'
+
+# Use smooth commands in your current terminal
+smooth start-session --url "https://example.com"
+
+# Stop proxy when done
+tmux kill-session -t smooth-proxy
+```
 
 ### Check Proxy Status
+
+From any terminal, check if a proxy is running:
 
 ```bash
 smooth proxy-status
 ```
 
+This displays the proxy URL and credentials needed to connect.
+
 ### Stop the Proxy
 
-Either press `Ctrl+C` in the proxy terminal, or from another terminal:
-
-```bash
-smooth stop-proxy
-```
+Press `Ctrl+C` in the terminal where the proxy is running. The proxy state is cleaned up automatically.
 
 ### Automatic Proxy Usage
 
-When a proxy is running, `smooth start-session` automatically uses it:
+When a proxy is running, `smooth start-session` automatically discovers and uses it:
 
 ```bash
-# In terminal 1: Start proxy
+# Terminal 1: Start proxy (blocks)
 smooth start-proxy
 
-# In terminal 2: Sessions use the proxy automatically
+# Terminal 2: Sessions automatically use the proxy
 smooth start-session --url "https://example.com"
 # Output: "Using proxy: https://..."
 ```
-
-### Proxy Requirements
-
-The proxy feature requires additional packages:
-```bash
-pip install pproxy flaredantic
-```
-
----
 
 ## Best Practices
 
@@ -440,8 +445,7 @@ pip install pproxy flaredantic
 - `smooth downloads <session-id>` - Get downloads URL
 
 ### Proxy Commands
-- `smooth start-proxy [OPTIONS]` - Start a local proxy with tunnel
-- `smooth stop-proxy` - Stop the running proxy
+- `smooth start-proxy [OPTIONS]` - Start a local proxy with tunnel (blocking process)
 - `smooth proxy-status` - Show proxy status and credentials
 
 All commands support `--json` flag for JSON output.

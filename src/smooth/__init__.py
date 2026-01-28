@@ -1,7 +1,7 @@
 # pyright: reportPrivateUsage=false
 """Smooth python SDK."""
 
-from ._client import SmoothAsyncClient, SmoothClient
+from ._client import ProxyConfig, SmoothAsyncClient, SmoothClient
 from ._exceptions import ApiError, BadRequestError, TimeoutError, ToolCallError
 from ._interface import (
   AsyncSessionHandle,
@@ -19,6 +19,7 @@ from ._tools import (
 __all__ = [
   "SmoothClient",
   "SmoothAsyncClient",
+  "ProxyConfig",
   "SessionHandle",
   "AsyncSessionHandle",
   "AsyncSmoothTool",

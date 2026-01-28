@@ -41,6 +41,8 @@ class TunnelConfig:
   tcp: bool = False
   tunnel_id: str | None = None
   device_login: bool = False
+  username: str | None = None
+  password: str | None = None
 
 
 @dataclass
@@ -84,7 +86,7 @@ class _ProxyState:
   proxy_loop: asyncio.AbstractEventLoop | None = None
   proxy_thread: threading.Thread | None = None
   tunnel: object | None = None
-  _lock: threading.Lock = field(default_factory=threading.Lock)
+  lock: threading.Lock = field(default_factory=threading.Lock)
 
 
 class LocalProxy:
@@ -165,26 +167,30 @@ class LocalProxy:
 
   def start(self) -> ProxyCredentials:
     """Start the local proxy server and expose it via tunnel."""
-    with self._state._lock:
+    with self._state.lock:
       if self._state.credentials is not None:
         return self._state.credentials
 
-      username, password = self._generate_credentials()
+      # Use provided credentials or generate random ones
+      if self.config.username and self.config.password:
+        username, password = self.config.username, self.config.password
+      else:
+        username, password = self._generate_credentials()
 
       try:
         import pproxy  # type: ignore
 
         loop = asyncio.new_event_loop()
-        server = pproxy.Server(f"http://127.0.0.1:{self.config.port}/#{username}:{password}")
+        server = pproxy.Server(f"http://127.0.0.1:{self.config.port}/#{username}:{password}")  # type: ignore
 
         def run_proxy():
           asyncio.set_event_loop(loop)
-          handler = loop.run_until_complete(server.start_server({"listen": None}))
+          handler = loop.run_until_complete(server.start_server({"listen": None}))  # type: ignore
           try:
             loop.run_forever()
           finally:
             handler.close()
-            loop.run_until_complete(handler.wait_closed())
+            loop.run_until_complete(handler.wait_closed())  # type: ignore
 
         proxy_thread = threading.Thread(target=run_proxy, daemon=True)
         proxy_thread.start()
@@ -213,14 +219,14 @@ class LocalProxy:
 
   def stop(self):
     """Stop the local proxy server and tunnel."""
-    with self._state._lock:
+    with self._state.lock:
       self._cleanup()
 
   def _cleanup(self):
     """Internal cleanup method."""
     if self._state.tunnel is not None:
       try:
-        self._state.tunnel.stop()
+        self._state.tunnel.stop()  # type: ignore
       except Exception:
         pass
       self._state.tunnel = None
@@ -239,13 +245,13 @@ class LocalProxy:
   @property
   def is_running(self) -> bool:
     """Check if the proxy is currently running."""
-    with self._state._lock:
+    with self._state.lock:
       return self._state.credentials is not None
 
   @property
   def credentials(self) -> ProxyCredentials | None:
     """Get current credentials if proxy is running."""
-    with self._state._lock:
+    with self._state.lock:
       return self._state.credentials
 
   def __enter__(self) -> ProxyCredentials:

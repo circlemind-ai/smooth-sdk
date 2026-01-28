@@ -19,6 +19,10 @@ dependencies = [
 mcp = [
     "fastmcp (>=2.12.0,<3.0.0)"
 ]
+proxy = [
+    "pproxy (>=2.7.0,<3.0.0)",
+    "flaredantic (>=0.1.0,<1.0.0)"
+]
 
 [project.scripts]
 smooth = "smooth.cli:main"

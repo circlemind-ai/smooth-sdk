@@ -5,7 +5,7 @@ import io
 import os
 import threading
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Literal, Sequence, Type, TypeVar, cast
+from typing import Any, Callable, Coroutine, Literal, Sequence, Type, TypedDict, TypeVar, cast
 
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
@@ -16,6 +16,7 @@ from smooth._interface import AsyncSessionHandle, AsyncTaskHandle, BrowserSessio
 
 from ._config import BASE_URL
 from ._exceptions import ApiError
+from ._proxy import LocalProxy, TunnelConfig
 from ._tools import AsyncSmoothTool, SmoothTool
 from ._utils import logger, process_certificates
 from .models import (
@@ -37,6 +38,14 @@ from .models import (
 )
 
 T = TypeVar("T")
+
+
+class ProxyConfig(TypedDict):
+  """Configuration returned by start_proxy() for use with session methods."""
+
+  proxy_server: str
+  proxy_username: str
+  proxy_password: str
 
 
 # --- Base Client ---
@@ -157,6 +166,7 @@ class SmoothClient(BaseClient):
     custom_tools: Sequence[SmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
+    show_cursor: bool = False,
   ) -> SessionHandle:
     """Opens a browser session."""
     task_handle = self.run(
@@ -179,6 +189,7 @@ class SmoothClient(BaseClient):
       custom_tools=custom_tools,
       experimental_features=experimental_features,
       extensions=extensions,
+      show_cursor=show_cursor,
     )
 
     tools = cast(dict[str, SmoothTool] | None, task_handle._async_handle._tools)
@@ -209,6 +220,7 @@ class SmoothClient(BaseClient):
     custom_tools: Sequence[SmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
+    show_cursor: bool = False,
   ) -> TaskHandle:
     """Runs a task and returns a handle to the task.
 
@@ -243,6 +255,7 @@ class SmoothClient(BaseClient):
         custom_tools: Custom tools to register for the task. Use the @client.tool decorator or SmoothTool class.
         experimental_features: Experimental features to enable for the task.
         extensions: List of extension IDs to load into the browser for this task.
+        show_cursor: Show mouse cursor. Default is False.
 
     Returns:
         A handle to the running task.
@@ -278,6 +291,7 @@ class SmoothClient(BaseClient):
         custom_tools=custom_tools_,
         experimental_features=experimental_features,
         extensions=extensions,
+        show_cursor=show_cursor,
       )
     )
 
@@ -377,6 +391,59 @@ class SmoothClient(BaseClient):
   def delete_extension(self, extension_id: str):
     """Delete an extension by its ID."""
     return self._run_async(self._async_client.delete_extension(extension_id))
+
+  # --- Proxy Methods --- #
+
+  def start_proxy(
+    self,
+    provider: Literal["cloudflare", "serveo", "microsoft"] = "cloudflare",
+    port: int = 8888,
+    timeout: int = 30,
+    verbose: bool = False,
+    username: str | None = None,
+    password: str | None = None,
+  ) -> ProxyConfig:
+    """Start a local proxy server with public tunnel exposure.
+
+    The proxy runs in a background thread and can be stopped with stop_proxy().
+    Returns a dict with proxy credentials that can be unpacked into session/run methods.
+
+    Example:
+        proxy_config = client.start_proxy()
+        client.session(**proxy_config)
+        # ... use the session ...
+        client.stop_proxy()
+
+    Args:
+        provider: Tunnel provider ("cloudflare", "serveo", or "microsoft").
+        port: Local port for the proxy server.
+        timeout: Tunnel timeout in seconds.
+        verbose: Enable verbose output.
+        username: Optional proxy username. If not provided, randomly generated.
+        password: Optional proxy password. If not provided, randomly generated.
+
+    Returns:
+        ProxyConfig dict with keys: proxy_server, proxy_username, proxy_password
+
+    Raises:
+        RuntimeError: If proxy is already running or fails to start.
+    """
+    return self._async_client.start_proxy(
+      provider=provider,
+      port=port,
+      timeout=timeout,
+      verbose=verbose,
+      username=username,
+      password=password,
+    )
+
+  def stop_proxy(self):
+    """Stop the running proxy server.
+
+    Raises:
+        RuntimeError: If no proxy is currently running.
+    """
+    return self._async_client.stop_proxy()
 
   # --- Private Methods ---
 
@@ -521,6 +588,9 @@ class SmoothAsyncClient(BaseClient):
     self._client: aiohttp.ClientSession | RetryClient | None = None
     self._retry_client: RetryClient | None = None
 
+    # Proxy instance
+    self._proxy: LocalProxy | None = None
+
   async def session(
     self,
     url: str | None = None,
@@ -541,6 +611,7 @@ class SmoothAsyncClient(BaseClient):
     custom_tools: Sequence[AsyncSmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
+    show_cursor: bool = False,
   ):
     """Opens a browser session."""
     task_handle = await self.run(
@@ -563,6 +634,7 @@ class SmoothAsyncClient(BaseClient):
       custom_tools=custom_tools,
       experimental_features=experimental_features,
       extensions=extensions,
+      show_cursor=show_cursor,
     )
 
     return AsyncSessionHandle(task_handle._id, self, tools=list(task_handle._tools.values()) if task_handle._tools else None)
@@ -592,6 +664,7 @@ class SmoothAsyncClient(BaseClient):
     custom_tools: Sequence[AsyncSmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
+    show_cursor: bool = False,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
 
@@ -626,6 +699,7 @@ class SmoothAsyncClient(BaseClient):
         custom_tools: Custom tools to register for the task.
         experimental_features: Experimental features to enable for the task.
         extensions: List of extension IDs to load into the browser for this task.
+        show_cursor: Show mouse cursor. Default is False.
 
     Returns:
         A handle to the running task.
@@ -663,6 +737,7 @@ class SmoothAsyncClient(BaseClient):
       custom_tools=[tool.signature for tool in custom_tools_] if custom_tools_ else None,
       experimental_features=experimental_features,
       extensions=extensions,
+      show_cursor=show_cursor,
     )
 
     initial_response = await self._submit_task(payload)
@@ -844,6 +919,75 @@ class SmoothAsyncClient(BaseClient):
     except aiohttp.ClientError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  # --- Proxy Methods --- #
+
+  def start_proxy(
+    self,
+    provider: Literal["cloudflare", "serveo", "microsoft"] = "cloudflare",
+    port: int = 8888,
+    timeout: int = 30,
+    verbose: bool = False,
+    username: str | None = None,
+    password: str | None = None,
+  ) -> ProxyConfig:
+    """Start a local proxy server with public tunnel exposure.
+
+    The proxy runs in a background thread and can be stopped with stop_proxy().
+    Returns a dict with proxy credentials that can be unpacked into session/run methods.
+
+    Example:
+        proxy_config = client.start_proxy()
+        await client.session(**proxy_config)
+        # ... use the session ...
+        client.stop_proxy()
+
+    Args:
+        provider: Tunnel provider ("cloudflare", "serveo", or "microsoft").
+        port: Local port for the proxy server.
+        timeout: Tunnel timeout in seconds.
+        verbose: Enable verbose output.
+        username: Optional proxy username. If not provided, randomly generated.
+        password: Optional proxy password. If not provided, randomly generated.
+
+    Returns:
+        ProxyConfig dict with keys: proxy_server, proxy_username, proxy_password
+
+    Raises:
+        RuntimeError: If proxy is already running or fails to start.
+    """
+    if self._proxy is not None and self._proxy.is_running:
+      raise RuntimeError("Proxy is already running. Call stop_proxy() first.")
+
+    config = TunnelConfig(
+      provider=provider,
+      port=port,
+      timeout=timeout,
+      verbose=verbose,
+      username=username,
+      password=password,
+    )
+
+    self._proxy = LocalProxy(config)
+    credentials = self._proxy.start()
+
+    return ProxyConfig(
+      proxy_server=credentials.url,
+      proxy_username=credentials.username,
+      proxy_password=credentials.password,
+    )
+
+  def stop_proxy(self):
+    """Stop the running proxy server.
+
+    Raises:
+        RuntimeError: If no proxy is currently running.
+    """
+    if self._proxy is None or not self._proxy.is_running:
+      raise RuntimeError("No proxy is currently running.")
+
+    self._proxy.stop()
+    self._proxy = None
 
   # --- Private Methods ---
 

@@ -4,19 +4,19 @@ import argparse
 import asyncio
 import json
 import os
+import signal
 import sys
 from typing import Any, cast
 
-from smooth import SmoothAsyncClient
+from smooth import SmoothAsyncClient, SmoothClient
 from smooth._exceptions import ApiError
 from smooth._interface import AsyncSessionHandle, AsyncTaskHandle
 from smooth._proxy import (
-  TunnelConfig,
   clear_proxy_state,
   get_proxy_credentials,
   is_proxy_running,
   load_proxy_state,
-  run_proxy_server,
+  save_proxy_state,
 )
 
 
@@ -156,6 +156,7 @@ async def start_session(args: argparse.Namespace):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      show_cursor=True,  # Show mouse cursor by default
     )
 
     session_id = task_handle.id()
@@ -379,42 +380,57 @@ def start_proxy(args: argparse.Namespace):
     creds = load_proxy_state()
     if creds:
       print("Proxy is already running!")
-      print(f"  URL:      {creds.url}")
-      print(f"  Username: {creds.username}")
-      print(f"  Password: {creds.password}")
-      print(f"  PID:      {creds.pid}")
     return
 
-  config = TunnelConfig(
-    provider=args.provider,
-    port=args.port,
-    timeout=args.timeout,
-    verbose=args.verbose,
-    tcp=args.tcp,
-  )
+  # Create client and start proxy using client method
+  client = SmoothClient()
 
-  # Run the proxy server (blocking)
-  run_proxy_server(config)
-
-
-def stop_proxy(args: argparse.Namespace):
-  """Stop a running proxy."""
-  if not is_proxy_running():
-    print("No proxy is currently running.")
-    return
-
-  creds = load_proxy_state()
-  if creds and creds.pid:
+  def signal_handler(sig: Any, frame: Any):
+    print("\nStopping proxy...")
     try:
-      os.kill(creds.pid, 15)  # SIGTERM
-      print(f"Sent stop signal to proxy (PID: {creds.pid})")
-    except ProcessLookupError:
-      print("Proxy process not found (may have already stopped)")
-    except PermissionError:
-      print_error(f"Permission denied to stop proxy (PID: {creds.pid})")
+      client.stop_proxy()
+    except Exception:
+      pass
+    clear_proxy_state()
+    sys.exit(0)
 
-  clear_proxy_state()
-  print("Proxy state cleared.")
+  signal.signal(signal.SIGINT, signal_handler)
+  signal.signal(signal.SIGTERM, signal_handler)
+
+  print(f"Starting proxy on port {args.port} with {args.provider} tunnel...")
+
+  try:
+    # Start proxy using client method
+    proxy_config = client.start_proxy(
+      provider=args.provider,
+      port=args.port,
+      timeout=args.timeout,
+      verbose=args.verbose,
+    )
+
+    # Save state for CLI management
+    from smooth._proxy import ProxyCredentials
+
+    credentials = ProxyCredentials(
+      url=proxy_config["proxy_server"],
+      username=proxy_config["proxy_username"],
+      password=proxy_config["proxy_password"],
+      local_port=args.port,
+      pid=None,  # Not needed for CLI state
+    )
+    save_proxy_state(credentials)
+
+    print("\nProxy is running!")
+    print("\nThe proxy will be automatically used by 'smooth start-session'.")
+    print("Press Ctrl+C to stop.\n")
+
+    # Keep process alive
+    signal.pause()
+
+  except Exception as e:
+    print(f"Error: {e}")
+    clear_proxy_state()
+    sys.exit(1)
 
 
 def proxy_status(args: argparse.Namespace):
@@ -426,7 +442,6 @@ def proxy_status(args: argparse.Namespace):
       print(f"  URL:      {creds.url}")
       print(f"  Username: {creds.username}")
       print(f"  Password: {creds.password}")
-      print(f"  PID:      {creds.pid}")
       if args.json:
         print_json(
           {
@@ -434,7 +449,6 @@ def proxy_status(args: argparse.Namespace):
             "url": creds.url,
             "username": creds.username,
             "password": creds.password,
-            "pid": creds.pid,
           }
         )
   else:
@@ -565,10 +579,6 @@ def main():
   start_proxy_parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
   start_proxy_parser.add_argument("--tcp", action="store_true", help="Use TCP mode (serveo only)")
   start_proxy_parser.set_defaults(func=start_proxy)
-
-  # stop-proxy command
-  stop_proxy_parser = subparsers.add_parser("stop-proxy", help="Stop a running proxy")
-  stop_proxy_parser.set_defaults(func=stop_proxy)
 
   # proxy-status command
   proxy_status_parser = subparsers.add_parser("proxy-status", help="Show the status of the proxy")
