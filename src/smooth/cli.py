@@ -574,7 +574,7 @@ def main():
     default="cloudflare",
     help="Tunnel provider (default: cloudflare)",
   )
-  start_proxy_parser.add_argument("--port", type=int, default=8888, help="Local port (default: 8888)")
+  start_proxy_parser.add_argument("--port", type=int, default=59438, help="Local port (default: 8888)")
   start_proxy_parser.add_argument("--timeout", type=int, default=30, help="Tunnel timeout in seconds (default: 30)")
   start_proxy_parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
   start_proxy_parser.add_argument("--tcp", action="store_true", help="Use TCP mode (serveo only)")

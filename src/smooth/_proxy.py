@@ -33,7 +33,7 @@ class TunnelConfig:
   """Configuration options for the tunnel."""
 
   provider: TunnelProvider = "cloudflare"
-  port: int = 8888
+  port: int = 59438
   timeout: int = 30
   verbose: bool = False
   bin_dir: str | None = None
