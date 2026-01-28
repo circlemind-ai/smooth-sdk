@@ -16,7 +16,7 @@ from smooth._interface import AsyncSessionHandle, AsyncTaskHandle, BrowserSessio
 
 from ._config import BASE_URL
 from ._exceptions import ApiError
-from ._proxy import LocalProxy, TunnelConfig
+from ._proxy import LocalProxy  #, TunnelConfig
 from ._tools import AsyncSmoothTool, SmoothTool
 from ._utils import logger, process_certificates
 from .models import (
@@ -394,56 +394,56 @@ class SmoothClient(BaseClient):
 
   # --- Proxy Methods --- #
 
-  def start_proxy(
-    self,
-    provider: Literal["cloudflare", "serveo", "microsoft"] = "cloudflare",
-    port: int = 8888,
-    timeout: int = 30,
-    verbose: bool = False,
-    username: str | None = None,
-    password: str | None = None,
-  ) -> ProxyConfig:
-    """Start a local proxy server with public tunnel exposure.
+  # def start_proxy(
+  #   self,
+  #   provider: Literal["cloudflare", "serveo", "microsoft"] = "cloudflare",
+  #   port: int = 8888,
+  #   timeout: int = 30,
+  #   verbose: bool = False,
+  #   username: str | None = None,
+  #   password: str | None = None,
+  # ) -> ProxyConfig:
+  #   """Start a local proxy server with public tunnel exposure.
 
-    The proxy runs in a background thread and can be stopped with stop_proxy().
-    Returns a dict with proxy credentials that can be unpacked into session/run methods.
+  #   The proxy runs in a background thread and can be stopped with stop_proxy().
+  #   Returns a dict with proxy credentials that can be unpacked into session/run methods.
 
-    Example:
-        proxy_config = client.start_proxy()
-        client.session(**proxy_config)
-        # ... use the session ...
-        client.stop_proxy()
+  #   Example:
+  #       proxy_config = client.start_proxy()
+  #       client.session(**proxy_config)
+  #       # ... use the session ...
+  #       client.stop_proxy()
 
-    Args:
-        provider: Tunnel provider ("cloudflare", "serveo", or "microsoft").
-        port: Local port for the proxy server.
-        timeout: Tunnel timeout in seconds.
-        verbose: Enable verbose output.
-        username: Optional proxy username. If not provided, randomly generated.
-        password: Optional proxy password. If not provided, randomly generated.
+  #   Args:
+  #       provider: Tunnel provider ("cloudflare", "serveo", or "microsoft").
+  #       port: Local port for the proxy server.
+  #       timeout: Tunnel timeout in seconds.
+  #       verbose: Enable verbose output.
+  #       username: Optional proxy username. If not provided, randomly generated.
+  #       password: Optional proxy password. If not provided, randomly generated.
 
-    Returns:
-        ProxyConfig dict with keys: proxy_server, proxy_username, proxy_password
+  #   Returns:
+  #       ProxyConfig dict with keys: proxy_server, proxy_username, proxy_password
 
-    Raises:
-        RuntimeError: If proxy is already running or fails to start.
-    """
-    return self._async_client.start_proxy(
-      provider=provider,
-      port=port,
-      timeout=timeout,
-      verbose=verbose,
-      username=username,
-      password=password,
-    )
+  #   Raises:
+  #       RuntimeError: If proxy is already running or fails to start.
+  #   """
+  #   return self._async_client.start_proxy(
+  #     provider=provider,
+  #     port=port,
+  #     timeout=timeout,
+  #     verbose=verbose,
+  #     username=username,
+  #     password=password,
+  #   )
 
-  def stop_proxy(self):
-    """Stop the running proxy server.
+  # def stop_proxy(self):
+  #   """Stop the running proxy server.
 
-    Raises:
-        RuntimeError: If no proxy is currently running.
-    """
-    return self._async_client.stop_proxy()
+  #   Raises:
+  #       RuntimeError: If no proxy is currently running.
+  #   """
+  #   return self._async_client.stop_proxy()
 
   # --- Private Methods ---
 
@@ -922,72 +922,72 @@ class SmoothAsyncClient(BaseClient):
 
   # --- Proxy Methods --- #
 
-  def start_proxy(
-    self,
-    provider: Literal["cloudflare", "serveo", "microsoft"] = "cloudflare",
-    port: int = 8888,
-    timeout: int = 30,
-    verbose: bool = False,
-    username: str | None = None,
-    password: str | None = None,
-  ) -> ProxyConfig:
-    """Start a local proxy server with public tunnel exposure.
+  # def start_proxy(
+  #   self,
+  #   provider: Literal["cloudflare", "serveo", "microsoft"] = "cloudflare",
+  #   port: int = 8888,
+  #   timeout: int = 30,
+  #   verbose: bool = False,
+  #   username: str | None = None,
+  #   password: str | None = None,
+  # ) -> ProxyConfig:
+  #   """Start a local proxy server with public tunnel exposure.
 
-    The proxy runs in a background thread and can be stopped with stop_proxy().
-    Returns a dict with proxy credentials that can be unpacked into session/run methods.
+  #   The proxy runs in a background thread and can be stopped with stop_proxy().
+  #   Returns a dict with proxy credentials that can be unpacked into session/run methods.
 
-    Example:
-        proxy_config = client.start_proxy()
-        await client.session(**proxy_config)
-        # ... use the session ...
-        client.stop_proxy()
+  #   Example:
+  #       proxy_config = client.start_proxy()
+  #       await client.session(**proxy_config)
+  #       # ... use the session ...
+  #       client.stop_proxy()
 
-    Args:
-        provider: Tunnel provider ("cloudflare", "serveo", or "microsoft").
-        port: Local port for the proxy server.
-        timeout: Tunnel timeout in seconds.
-        verbose: Enable verbose output.
-        username: Optional proxy username. If not provided, randomly generated.
-        password: Optional proxy password. If not provided, randomly generated.
+  #   Args:
+  #       provider: Tunnel provider ("cloudflare", "serveo", or "microsoft").
+  #       port: Local port for the proxy server.
+  #       timeout: Tunnel timeout in seconds.
+  #       verbose: Enable verbose output.
+  #       username: Optional proxy username. If not provided, randomly generated.
+  #       password: Optional proxy password. If not provided, randomly generated.
 
-    Returns:
-        ProxyConfig dict with keys: proxy_server, proxy_username, proxy_password
+  #   Returns:
+  #       ProxyConfig dict with keys: proxy_server, proxy_username, proxy_password
 
-    Raises:
-        RuntimeError: If proxy is already running or fails to start.
-    """
-    if self._proxy is not None and self._proxy.is_running:
-      raise RuntimeError("Proxy is already running. Call stop_proxy() first.")
+  #   Raises:
+  #       RuntimeError: If proxy is already running or fails to start.
+  #   """
+  #   if self._proxy is not None and self._proxy.is_running:
+  #     raise RuntimeError("Proxy is already running. Call stop_proxy() first.")
 
-    config = TunnelConfig(
-      provider=provider,
-      port=port,
-      timeout=timeout,
-      verbose=verbose,
-      username=username,
-      password=password,
-    )
+  #   config = TunnelConfig(
+  #     provider=provider,
+  #     port=port,
+  #     timeout=timeout,
+  #     verbose=verbose,
+  #     username=username,
+  #     password=password,
+  #   )
 
-    self._proxy = LocalProxy(config)
-    credentials = self._proxy.start()
+  #   self._proxy = LocalProxy(config)
+  #   credentials = self._proxy.start()
 
-    return ProxyConfig(
-      proxy_server=credentials.url,
-      proxy_username=credentials.username,
-      proxy_password=credentials.password,
-    )
+  #   return ProxyConfig(
+  #     proxy_server=credentials.url,
+  #     proxy_username=credentials.username,
+  #     proxy_password=credentials.password,
+  #   )
 
-  def stop_proxy(self):
-    """Stop the running proxy server.
+  # def stop_proxy(self):
+  #   """Stop the running proxy server.
 
-    Raises:
-        RuntimeError: If no proxy is currently running.
-    """
-    if self._proxy is None or not self._proxy.is_running:
-      raise RuntimeError("No proxy is currently running.")
+  #   Raises:
+  #       RuntimeError: If no proxy is currently running.
+  #   """
+  #   if self._proxy is None or not self._proxy.is_running:
+  #     raise RuntimeError("No proxy is currently running.")
 
-    self._proxy.stop()
-    self._proxy = None
+  #   self._proxy.stop()
+  #   self._proxy = None
 
   # --- Private Methods ---
 

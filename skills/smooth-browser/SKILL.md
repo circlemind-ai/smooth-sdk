@@ -338,66 +338,6 @@ smooth delete-file <file-id>
 
 ---
 
-## Proxy Support
-
-Use a local proxy with public tunnel exposure for sessions that need to appear from your own network.
-
-### Start a Proxy
-
-**Important:** The proxy runs as a **blocking foreground process**. You must run it in a **background terminal** or use a terminal multiplexer (tmux/screen) to keep it running while you use other smooth commands.
-
-```bash
-# Start in a dedicated terminal (blocks until stopped with Ctrl+C)
-smooth start-proxy
-```
-
-**Options:**
-- `--provider cloudflare|serveo|microsoft` - Tunnel provider (default: cloudflare)
-- `--port PORT` - Local port (default: 8888)
-- `--timeout SECONDS` - Tunnel startup timeout (default: 30)
-- `--verbose` - Enable verbose output
-
-The command will block. **Keep this terminal open** while using the proxy.
-
-**Example - Using with tmux:**
-```bash
-# Start proxy in background tmux session
-tmux new-session -d -s smooth-proxy 'smooth start-proxy'
-
-# Use smooth commands in your current terminal
-smooth start-session --url "https://example.com"
-
-# Stop proxy when done
-tmux kill-session -t smooth-proxy
-```
-
-### Check Proxy Status
-
-From any terminal, check if a proxy is running:
-
-```bash
-smooth proxy-status
-```
-
-This displays the proxy URL and credentials needed to connect.
-
-### Stop the Proxy
-
-Press `Ctrl+C` in the terminal where the proxy is running. The proxy state is cleaned up automatically.
-
-### Automatic Proxy Usage
-
-When a proxy is running, `smooth start-session` automatically discovers and uses it:
-
-```bash
-# Terminal 1: Start proxy (blocks)
-smooth start-proxy
-
-# Terminal 2: Sessions automatically use the proxy
-smooth start-session --url "https://example.com"
-# Output: "Using proxy: https://..."
-```
-
 ## Best Practices
 
 1. **Always save session IDs** - You'll need them for subsequent commands
@@ -443,9 +383,5 @@ smooth start-session --url "https://example.com"
 - `smooth live-view <session-id>` - Get interactive live URL
 - `smooth recording-url <session-id>` - Get recording URL
 - `smooth downloads <session-id>` - Get downloads URL
-
-### Proxy Commands
-- `smooth start-proxy [OPTIONS]` - Start a local proxy with tunnel (blocking process)
-- `smooth proxy-status` - Show proxy status and credentials
 
 All commands support `--json` flag for JSON output.
