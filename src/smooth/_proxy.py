@@ -87,6 +87,8 @@ class _ProxyState:
   proxy_thread: threading.Thread | None = None
   tunnel: object | None = None
   lock: threading.Lock = field(default_factory=threading.Lock)
+  proxy_started: threading.Event = field(default_factory=threading.Event)
+  proxy_error: Exception | None = None
 
 
 class LocalProxy:
@@ -185,15 +187,31 @@ class LocalProxy:
 
         def run_proxy():
           asyncio.set_event_loop(loop)
-          handler = loop.run_until_complete(server.start_server({"listen": None}))  # type: ignore
           try:
-            loop.run_forever()
-          finally:
-            handler.close()
-            loop.run_until_complete(handler.wait_closed())  # type: ignore
+            handler = loop.run_until_complete(server.start_server({"listen": None}))  # type: ignore
+            self._state.proxy_started.set()  # Signal successful start
+            try:
+              loop.run_forever()
+            finally:
+              handler.close()
+              loop.run_until_complete(handler.wait_closed())  # type: ignore
+          except Exception as e:
+            self._state.proxy_error = e
+            self._state.proxy_started.set()  # Signal completion (with error)
 
         proxy_thread = threading.Thread(target=run_proxy, daemon=True)
         proxy_thread.start()
+
+        # Wait for proxy to start or fail (max 5 seconds)
+        if not self._state.proxy_started.wait(timeout=5.0):
+          self._cleanup()
+          raise RuntimeError("Proxy server failed to start within 5 seconds")
+
+        # Check if there was an error during startup
+        if self._state.proxy_error is not None:
+          error = self._state.proxy_error
+          self._cleanup()
+          raise RuntimeError(f"Proxy server failed to start: {error}") from error
 
         self._state.proxy_server = server
         self._state.proxy_loop = loop
@@ -241,6 +259,8 @@ class LocalProxy:
     self._state.proxy_server = None
     self._state.proxy_thread = None
     self._state.credentials = None
+    self._state.proxy_error = None
+    self._state.proxy_started.clear()
 
   @property
   def is_running(self) -> bool:
