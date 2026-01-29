@@ -1,366 +1,267 @@
-"""Local proxy server with public tunnel exposure.
+"""FRP-based proxy tunnel for exposing local SOCKS5 proxy.
 
 This module provides functionality to:
-1. Start a local HTTP proxy server with authentication (using pproxy)
-2. Expose it publicly via flaredantic tunnels (Cloudflare, Serveo, or Microsoft)
-3. Return credentials (url, username, password) for connecting to the proxy
+1. Download and install the FRP client binary (frpc)
+2. Start a SOCKS5 proxy tunnel to a remote FRP server
+3. Manage proxy lifecycle per session
 
-Requirements:
-    pip install pproxy flaredantic
+The proxy connects to a remote FRP server and exposes a local SOCKS5 proxy
+that can be used by the browser session.
 """
 
-import asyncio
-import json
-import os
-import secrets
-import signal
-import string
-import sys
+import platform
+import shutil
+import subprocess
+import tarfile
+import tempfile
 import threading
+import urllib.request
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-# Tunnel provider types
-TunnelProvider = Literal["cloudflare", "serveo", "microsoft"]
+# FRP version to use
+FRP_VERSION = "0.66.0"
 
-# State file location
-PROXY_STATE_FILE = Path.home() / ".smooth" / "proxy.json"
-
-
-@dataclass
-class TunnelConfig:
-  """Configuration options for the tunnel."""
-
-  provider: TunnelProvider = "cloudflare"
-  port: int = 59438
-  timeout: int = 30
-  verbose: bool = False
-  bin_dir: str | None = None
-  ssh_dir: str | None = None
-  tcp: bool = False
-  tunnel_id: str | None = None
-  device_login: bool = False
-  username: str | None = None
-  password: str | None = None
+# Directory to store FRP binaries and configs
+FRP_DIR = Path.home() / ".smooth" / "frp"
 
 
 @dataclass
-class ProxyCredentials:
-  """Credentials for connecting to the proxy."""
+class ProxyConfig:
+  """Configuration for the FRP proxy tunnel."""
 
-  url: str
-  username: str
-  password: str
-  local_port: int
-  pid: int | None = None
-
-  def to_dict(self) -> dict[str, str | int | None]:
-    """Convert to dictionary for JSON serialization."""
-    return {
-      "url": self.url,
-      "username": self.username,
-      "password": self.password,
-      "local_port": self.local_port,
-      "pid": self.pid,
-    }
-
-  @classmethod
-  def from_dict(cls, data: dict[str, str | int | None]) -> "ProxyCredentials":
-    """Create from dictionary."""
-    return cls(
-      url=str(data["url"]),
-      username=str(data["username"]),
-      password=str(data["password"]),
-      local_port=int(data["local_port"]),  # type: ignore
-      pid=int(pid) if (pid := data.get("pid")) else None,
-    )
+  server_ip: str
+  server_port: int
+  token: str
+  remote_port: int = 1080
+  session_id: str = "default"
 
 
 @dataclass
 class _ProxyState:
-  """Internal state for the proxy."""
+  """Internal state for a proxy instance."""
 
-  credentials: ProxyCredentials | None = None
-  proxy_server: object | None = None
-  proxy_loop: asyncio.AbstractEventLoop | None = None
-  proxy_thread: threading.Thread | None = None
-  tunnel: object | None = None
+  process: subprocess.Popen[bytes] | None = None
+  config_file: Path | None = None
   lock: threading.Lock = field(default_factory=threading.Lock)
-  proxy_started: threading.Event = field(default_factory=threading.Event)
-  proxy_error: Exception | None = None
 
 
-class LocalProxy:
-  """Local proxy server with public tunnel exposure."""
+class FRPProxy:
+  """FRP-based proxy tunnel manager."""
 
-  def __init__(self, config: TunnelConfig | None = None):
-    """Initialize the local proxy."""
-    self.config = config or TunnelConfig()
+  def __init__(self, config: ProxyConfig):
+    """Initialize the FRP proxy.
+
+    Args:
+        config: Proxy configuration with server details and token.
+    """
+    self.config = config
     self._state = _ProxyState()
+    self._bin_path: Path | None = None
 
-  def _generate_credentials(self) -> tuple[str, str]:
-    """Generate random username and password."""
-    chars = string.ascii_letters + string.digits
-    username = "user_" + "".join(secrets.choice(chars) for _ in range(8))
-    password = "".join(secrets.choice(chars) for _ in range(16))
-    return username, password
+  @staticmethod
+  def _get_platform_info() -> tuple[str, str, str]:
+    """Get platform-specific information for FRP download.
 
-  def _create_tunnel(self) -> tuple[object, str]:
-    """Create and start the tunnel based on config."""
-    provider = self.config.provider
-    port = self.config.port
+    Returns:
+        Tuple of (os_name, arch, extension).
 
-    if provider == "cloudflare":
-      from flaredantic import FlareConfig, FlareTunnel
+    Raises:
+        RuntimeError: If the platform is not supported.
+    """
+    system = platform.system().lower()
+    machine = platform.machine().lower()
 
-      config_kwargs: dict[str, int | bool | str] = {
-        "port": port,
-        "timeout": self.config.timeout,
-        "verbose": self.config.verbose,
-      }
-      if self.config.bin_dir:
-        config_kwargs["bin_dir"] = self.config.bin_dir
-
-      config = FlareConfig(**config_kwargs)  # type: ignore
-      tunnel = FlareTunnel(config)  # type: ignore
-      tunnel.start()  # type: ignore
-      return tunnel, tunnel.tunnel_url  # type: ignore
-
-    elif provider == "serveo":
-      from flaredantic import ServeoConfig, ServeoTunnel
-
-      config_kwargs: dict[str, int | bool | str] = {
-        "port": port,
-        "timeout": self.config.timeout,
-        "verbose": self.config.verbose,
-        "tcp": self.config.tcp,
-      }
-      if self.config.ssh_dir:
-        config_kwargs["ssh_dir"] = self.config.ssh_dir
-
-      config = ServeoConfig(**config_kwargs)  # type: ignore
-      tunnel = ServeoTunnel(config)  # type: ignore
-      tunnel.start()  # type: ignore
-      return tunnel, tunnel.tunnel_url  # type: ignore
-
-    elif provider == "microsoft":
-      from flaredantic import MicrosoftConfig, MicrosoftTunnel
-
-      config_kwargs: dict[str, int | bool | str] = {
-        "port": port,
-        "timeout": self.config.timeout,
-        "verbose": self.config.verbose,
-      }
-      if self.config.bin_dir:
-        config_kwargs["bin_dir"] = self.config.bin_dir
-      if self.config.tunnel_id:
-        config_kwargs["tunnel_id"] = self.config.tunnel_id
-      if self.config.device_login:
-        config_kwargs["device_login"] = self.config.device_login
-
-      config = MicrosoftConfig(**config_kwargs)  # type: ignore
-      tunnel = MicrosoftTunnel(config)  # type: ignore
-      tunnel.start()  # type: ignore
-      return tunnel, tunnel.tunnel_url  # type: ignore
-
+    # Map OS
+    if system == "darwin":
+      os_name = "darwin"
+    elif system == "windows":
+      os_name = "windows"
     else:
-      raise ValueError(f"Unknown tunnel provider: {provider}")
+      os_name = "linux"
 
-  def start(self) -> ProxyCredentials:
-    """Start the local proxy server and expose it via tunnel."""
-    with self._state.lock:
-      if self._state.credentials is not None:
-        return self._state.credentials
+    # Map architecture
+    if machine in ["x86_64", "amd64"]:
+      arch = "amd64"
+    elif machine in ["aarch64", "arm64"]:
+      arch = "arm64"
+    else:
+      raise RuntimeError(f"Unsupported architecture: {machine}")
 
-      # Use provided credentials or generate random ones
-      if self.config.username and self.config.password:
-        username, password = self.config.username, self.config.password
+    ext = "zip" if system == "windows" else "tar.gz"
+
+    return os_name, arch, ext
+
+  def _install_frp(self) -> Path:
+    """Download and install FRP binary if not already present.
+
+    Returns:
+        Path to the frpc binary.
+
+    Raises:
+        RuntimeError: If installation fails.
+    """
+    FRP_DIR.mkdir(parents=True, exist_ok=True)
+
+    os_name, arch, ext = self._get_platform_info()
+    bin_name = "frpc.exe" if os_name == "windows" else "frpc"
+    bin_path = FRP_DIR / bin_name
+
+    # Check if binary already exists
+    if bin_path.exists():
+      return bin_path
+
+    # Construct download URL
+    folder_name = f"frp_{FRP_VERSION}_{os_name}_{arch}"
+    filename = f"{folder_name}.{ext}"
+    url = f"https://github.com/fatedier/frp/releases/download/v{FRP_VERSION}/{filename}"
+
+    try:
+      # Download to temp file
+      with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+        tmp_path = Path(tmp.name)
+
+      urllib.request.urlretrieve(url, tmp_path)
+
+      # Extract
+      extract_dir = FRP_DIR / "extract_tmp"
+      extract_dir.mkdir(exist_ok=True)
+
+      if ext == "zip":
+        with zipfile.ZipFile(tmp_path, "r") as z:
+          z.extractall(extract_dir)
       else:
-        username, password = self._generate_credentials()
+        with tarfile.open(tmp_path, "r:gz") as t:
+          t.extractall(extract_dir)
+
+      # Move binary
+      src = extract_dir / folder_name / bin_name
+      if bin_path.exists():
+        bin_path.unlink()
+      shutil.move(str(src), str(bin_path))
+
+      # Cleanup
+      tmp_path.unlink()
+      shutil.rmtree(extract_dir, ignore_errors=True)
+
+      # Make executable on Unix
+      if os_name != "windows":
+        bin_path.chmod(0o755)
+
+      return bin_path
+
+    except Exception as e:
+      raise RuntimeError(f"Failed to install FRP: {e}") from e
+
+  def _create_config(self) -> Path:
+    """Create FRP client configuration file.
+
+    Returns:
+        Path to the configuration file.
+    """
+    FRP_DIR.mkdir(parents=True, exist_ok=True)
+
+    config_path = FRP_DIR / f"frpc_{self.config.session_id}.ini"
+
+    ini_content = f"""[common]
+server_addr = {self.config.server_ip}
+server_port = {self.config.server_port}
+token = {self.config.token}
+
+[socks5_tunnel_{self.config.session_id}]
+type = tcp
+remote_port = {self.config.remote_port}
+plugin = socks5
+"""
+    config_path.write_text(ini_content)
+    return config_path
+
+  def start(self) -> None:
+    """Start the FRP proxy tunnel.
+
+    Raises:
+        RuntimeError: If the proxy fails to start or is already running.
+    """
+    with self._state.lock:
+      if self._state.process is not None:
+        raise RuntimeError("Proxy is already running")
 
       try:
-        import pproxy  # type: ignore
+        # Install FRP if needed
+        self._bin_path = self._install_frp()
 
-        loop = asyncio.new_event_loop()
-        server = pproxy.Server(f"http://127.0.0.1:{self.config.port}/#{username}:{password}")  # type: ignore
+        # Create config
+        self._state.config_file = self._create_config()
 
-        def run_proxy():
-          asyncio.set_event_loop(loop)
+        # Build command
+        cmd = [str(self._bin_path), "-c", str(self._state.config_file)]
 
-          try:
-            handler = loop.run_until_complete(server.start_server({"rserver": []}))  # type: ignore
-            self._state.proxy_started.set()  # Signal successful start
-            try:
-              loop.run_forever()
-            finally:
-              handler.close()
-              loop.run_until_complete(handler.wait_closed())  # type: ignore
-          except Exception as e:
-            self._state.proxy_error = e
-            self._state.proxy_started.set()  # Signal completion (with error)
-
-        proxy_thread = threading.Thread(target=run_proxy, daemon=True)
-        proxy_thread.start()
-
-        # Wait for proxy to start or fail (max 5 seconds)
-        if not self._state.proxy_started.wait(timeout=5.0):
-          self._cleanup()
-          raise RuntimeError("Proxy server failed to start within 5 seconds")
-
-        # Check if there was an error during startup
-        if self._state.proxy_error is not None:
-          error = self._state.proxy_error
-          self._cleanup()
-          raise RuntimeError(f"Proxy server failed to start: {error}") from error
-
-        self._state.proxy_server = server
-        self._state.proxy_loop = loop
-        self._state.proxy_thread = proxy_thread
-
-        tunnel, tunnel_url = self._create_tunnel()
-        self._state.tunnel = tunnel
-
-        credentials = ProxyCredentials(
-          url=tunnel_url,
-          username=username,
-          password=password,
-          local_port=self.config.port,
-          pid=os.getpid(),
+        # Start process
+        self._state.process = subprocess.Popen(
+          cmd,
+          stdout=subprocess.PIPE,
+          stderr=subprocess.PIPE,
         )
-        self._state.credentials = credentials
 
-        return credentials
+        # Give it a moment to start and check if it failed immediately
+        try:
+          return_code = self._state.process.wait(timeout=1.0)
+          # Process exited, something went wrong
+          stderr = self._state.process.stderr.read().decode() if self._state.process.stderr else ""
+          self._cleanup()
+          raise RuntimeError(f"FRP process exited immediately with code {return_code}: {stderr}")
+        except subprocess.TimeoutExpired:
+          # Process is still running, good
+          pass
 
       except Exception as e:
         self._cleanup()
+        if isinstance(e, RuntimeError):
+          raise
         raise RuntimeError(f"Failed to start proxy: {e}") from e
 
-  def stop(self):
-    """Stop the local proxy server and tunnel."""
+  def stop(self) -> None:
+    """Stop the FRP proxy tunnel."""
     with self._state.lock:
       self._cleanup()
 
-  def _cleanup(self):
+  def _cleanup(self) -> None:
     """Internal cleanup method."""
-    if self._state.tunnel is not None:
+    if self._state.process is not None:
       try:
-        self._state.tunnel.stop()  # type: ignore
+        self._state.process.terminate()
+        try:
+          self._state.process.wait(timeout=5.0)
+        except subprocess.TimeoutExpired:
+          self._state.process.kill()
+          self._state.process.wait()
       except Exception:
         pass
-      self._state.tunnel = None
+      self._state.process = None
 
-    if self._state.proxy_loop is not None:
+    if self._state.config_file is not None:
       try:
-        self._state.proxy_loop.call_soon_threadsafe(self._state.proxy_loop.stop)
+        if self._state.config_file.exists():
+          self._state.config_file.unlink()
       except Exception:
         pass
-      self._state.proxy_loop = None
-
-    self._state.proxy_server = None
-    self._state.proxy_thread = None
-    self._state.credentials = None
-    self._state.proxy_error = None
-    self._state.proxy_started.clear()
+      self._state.config_file = None
 
   @property
   def is_running(self) -> bool:
     """Check if the proxy is currently running."""
     with self._state.lock:
-      return self._state.credentials is not None
+      if self._state.process is None:
+        return False
+      return self._state.process.poll() is None
 
-  @property
-  def credentials(self) -> ProxyCredentials | None:
-    """Get current credentials if proxy is running."""
-    with self._state.lock:
-      return self._state.credentials
-
-  def __enter__(self) -> ProxyCredentials:
+  def __enter__(self) -> "FRPProxy":
     """Context manager entry."""
-    return self.start()
+    self.start()
+    return self
 
-  def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
+  def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
     """Context manager exit."""
     self.stop()
-
-
-def save_proxy_state(credentials: ProxyCredentials):
-  """Save proxy credentials to state file."""
-  PROXY_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-  with open(PROXY_STATE_FILE, "w") as f:
-    json.dump(credentials.to_dict(), f)
-
-
-def load_proxy_state() -> ProxyCredentials | None:
-  """Load proxy credentials from state file."""
-  if not PROXY_STATE_FILE.exists():
-    return None
-  try:
-    with open(PROXY_STATE_FILE) as f:
-      data = json.load(f)
-      data["proxy_server"] = data["proxy_server"].replace("https://", "http://")
-    return ProxyCredentials.from_dict(data)
-  except Exception:
-    return None
-
-
-def clear_proxy_state():
-  """Clear proxy state file."""
-  if PROXY_STATE_FILE.exists():
-    PROXY_STATE_FILE.unlink()
-
-
-def is_proxy_running() -> bool:
-  """Check if a proxy is currently running."""
-  credentials = load_proxy_state()
-  if credentials is None or credentials.pid is None:
-    return False
-
-  try:
-    os.kill(credentials.pid, 0)
-    return True
-  except (OSError, ProcessLookupError):
-    clear_proxy_state()
-    return False
-
-
-def get_proxy_credentials() -> ProxyCredentials | None:
-  """Get proxy credentials if proxy is running."""
-  if is_proxy_running():
-    return load_proxy_state()
-  return None
-
-
-def run_proxy_server(config: TunnelConfig):
-  """Run the proxy server (blocking)."""
-  local_proxy = LocalProxy(config)
-
-  def signal_handler(sig: Any, frame: Any):
-    print("\nStopping proxy...")
-    local_proxy.stop()
-    clear_proxy_state()
-    sys.exit(0)
-
-  signal.signal(signal.SIGINT, signal_handler)
-  signal.signal(signal.SIGTERM, signal_handler)
-
-  print(f"Starting proxy on port {config.port} with {config.provider} tunnel...")
-
-  try:
-    creds = local_proxy.start()
-    save_proxy_state(creds)
-
-    print("\nProxy is running!")
-    print(f"  URL:      {creds.url}")
-    print(f"  Username: {creds.username}")
-    print(f"  Password: {creds.password}")
-    print(f"  PID:      {creds.pid}")
-    print("\nThe proxy will be automatically used by 'smooth start-session'.")
-    print("Press Ctrl+C to stop.\n")
-
-    signal.pause()
-
-  except Exception as e:
-    print(f"Error: {e}")
-    clear_proxy_state()
-    sys.exit(1)

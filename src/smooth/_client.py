@@ -16,7 +16,6 @@ from smooth._interface import AsyncSessionHandle, AsyncTaskHandle, BrowserSessio
 
 from ._config import BASE_URL
 from ._exceptions import ApiError
-from ._proxy import LocalProxy  #, TunnelConfig
 from ._tools import AsyncSmoothTool, SmoothTool
 from ._utils import logger, process_certificates
 from .models import (
@@ -587,9 +586,6 @@ class SmoothAsyncClient(BaseClient):
     self._retries = retries
     self._client: aiohttp.ClientSession | RetryClient | None = None
     self._retry_client: RetryClient | None = None
-
-    # Proxy instance
-    self._proxy: LocalProxy | None = None
 
   async def session(
     self,

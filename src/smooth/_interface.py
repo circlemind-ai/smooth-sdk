@@ -9,6 +9,7 @@ from nanoid import generate
 from pydantic import BaseModel, Field
 
 from ._exceptions import ApiError, BadRequestError, ToolCallError
+from ._proxy import FRPProxy, ProxyConfig
 from ._utils import encode_url, logger
 from .models import (
   ActionEvaluateJSResponse,
@@ -65,6 +66,9 @@ class AsyncTaskHandle(BaseTaskHandle):
     self._last_event_t = 0
     self._event_futures: dict[str, asyncio.Future[Any]] = {}
     self._tool_tasks: dict[str, asyncio.Task[Any]] = {}
+
+    # Proxy
+    self._proxy: FRPProxy | None = None
 
   # --- Task Methods ---
 
@@ -168,19 +172,49 @@ class AsyncTaskHandle(BaseTaskHandle):
       raise BadRequestError(f"Downloads URL not available for task {self.id()} while it is still running.")
     raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
 
-  async def _send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
-    """Sends an event to a running task."""
-    event.id = event.id or generate()
-    if has_result:
-      future = asyncio.get_running_loop().create_future()
-      self._event_futures[event.id] = future
+  # --- Proxy Methods ---
 
-      await self._client._send_task_event(self._id, event)
-      async with self._connection():
-        return await future
-    else:
-      await self._client._send_task_event(self._id, event)
-      return None
+  def _start_proxy(
+    self,
+    server_ip: str,
+    server_port: int,
+    token: str,
+    remote_port: int = 1080,
+  ) -> None:
+    """Start a proxy tunnel for this task/session.
+
+    Args:
+        server_ip: IP address of the FRP server.
+        server_port: Port the FRP server is listening on.
+        token: Authentication token for the FRP server.
+        remote_port: Remote port on the FRP server (default 1080).
+
+    Raises:
+        RuntimeError: If a proxy is already running for this handle.
+    """
+    if self._proxy is not None and self._proxy.is_running:
+      raise RuntimeError(f"Proxy for task {self._id} is already running")
+
+    config = ProxyConfig(
+      server_ip=server_ip,
+      server_port=server_port,
+      token=token,
+      remote_port=remote_port,
+      session_id=self._id,
+    )
+    self._proxy = FRPProxy(config)
+    self._proxy.start()
+
+  def _stop_proxy(self) -> None:
+    """Stop the proxy tunnel for this task/session."""
+    if self._proxy is not None:
+      self._proxy.stop()
+      self._proxy = None
+
+  @property
+  def _has_proxy(self) -> bool:
+    """Check if a proxy is currently running for this handle."""
+    return self._proxy is not None and self._proxy.is_running
 
   # --- Action Methods ---
 
@@ -224,6 +258,20 @@ class AsyncTaskHandle(BaseTaskHandle):
     return ActionEvaluateJSResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
 
   # --- Private Methods ---
+
+  async def _send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
+    """Sends an event to a running task."""
+    event.id = event.id or generate()
+    if has_result:
+      future = asyncio.get_running_loop().create_future()
+      self._event_futures[event.id] = future
+
+      await self._client._send_task_event(self._id, event)
+      async with self._connection():
+        return await future
+    else:
+      await self._client._send_task_event(self._id, event)
+      return None
 
   async def _connect(self):
     # We use a counter to keep track of how many clients requested a connection
@@ -438,6 +486,9 @@ class TaskHandle(BaseTaskHandle):
     """Returns the downloads URL for the task."""
     return self._run_async(self._async_handle.downloads_url(timeout))
 
+  def _start_proxy(self, server_ip: str, server_port: int, token: str, remote_port: int = 1080) -> None:
+    return self._async_handle._start_proxy(server_ip, server_port, token, remote_port)
+
   def goto(self, url: str) -> Any:
     """Navigates to the given URL."""
     return self._run_async(self._async_handle.goto(url))
@@ -449,6 +500,8 @@ class TaskHandle(BaseTaskHandle):
   def evaluate_js(self, code: str, args: dict[str, Any] | None = None) -> Any:
     """Evaluates JavaScript code in the browser context."""
     return self._run_async(self._async_handle.evaluate_js(code, args))
+
+  # --- Deprecated Methods ---
 
   @deprecated("update is deprecated, use send_event instead")
   def update(self, payload: TaskUpdateRequest) -> bool:
