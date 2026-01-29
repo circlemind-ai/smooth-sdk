@@ -349,36 +349,44 @@ def kill_proxy_process(pid: int | str) -> bool:
 
 async def close_session(args: argparse.Namespace):
   """Close a browser session."""
-  try:
-    # Kill proxy process if it exists
-    session_data = get_session(args.session_id)
-    if session_data and session_data.get("proxy_pid"):
+  # Kill proxy process if it exists (don't let this block the rest)
+  session_data = get_session(args.session_id)
+  if session_data and session_data.get("proxy_pid"):
+    try:
       if kill_proxy_process(session_data["proxy_pid"]):
         if not args.json:
           print("Stopped local proxy tunnel.")
+    except Exception:
+      pass  # Ignore proxy kill errors
 
+  # Try to close the session on the server
+  api_error = None
+  try:
     async with SmoothAsyncClient() as client:
       session_handle = AsyncSessionHandle(args.session_id, client)
       await session_handle.close(force=args.force)
-
-      # Remove session from sessions.json
-      remove_session(args.session_id)
-
-      if args.json:
-        print_success(
-          f"Session '{args.session_id}' closed successfully",
-          {"session_id": args.session_id, "force": args.force}
-        )
-      else:
-        print(f"Session '{args.session_id}' closed successfully!")
-        if args.force:
-          print("Note: Session forcefully terminated. Wait 5 seconds for the profile to save cookies and state.")
-        else:
-          print("Note: Graceful close initiated. Wait 5 seconds for the profile to save cookies and state.")
   except ApiError as e:
-    print_error(f"Failed to close session: {e.detail}", json_mode=args.json)
+    api_error = f"Failed to close session: {e.detail}"
   except Exception as e:
-    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
+    api_error = f"Unexpected error: {str(e)}"
+
+  # Always remove from sessions.json (even if API call failed, local cleanup should happen)
+  remove_session(args.session_id)
+
+  # Report result
+  if api_error:
+    print_error(api_error, json_mode=args.json)
+  elif args.json:
+    print_success(
+      f"Session '{args.session_id}' closed successfully",
+      {"session_id": args.session_id, "force": args.force}
+    )
+  else:
+    print(f"Session '{args.session_id}' closed successfully!")
+    if args.force:
+      print("Note: Session forcefully terminated. Wait 5 seconds for the profile to save cookies and state.")
+    else:
+      print("Note: Graceful close initiated. Wait 5 seconds for the profile to save cookies and state.")
 
 
 async def run_task(args: argparse.Namespace):
