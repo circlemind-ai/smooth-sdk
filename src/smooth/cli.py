@@ -53,6 +53,63 @@ def get_config_path() -> Path:
   return Path.home() / ".smooth" / "config.json"
 
 
+def get_sessions_path() -> Path:
+  """Get the path to the sessions file."""
+  return Path.home() / ".smooth" / "sessions.json"
+
+
+def load_sessions() -> dict[str, Any]:
+  """Load sessions from ~/.smooth/sessions.json."""
+  sessions_path = get_sessions_path()
+  if sessions_path.exists():
+    try:
+      with open(sessions_path) as f:
+        return json.load(f)
+    except (json.JSONDecodeError, IOError):
+      return {"sessions": []}
+  return {"sessions": []}
+
+
+def save_sessions(data: dict[str, Any]):
+  """Save sessions to ~/.smooth/sessions.json."""
+  sessions_path = get_sessions_path()
+  sessions_path.parent.mkdir(parents=True, exist_ok=True)
+  with open(sessions_path, "w") as f:
+    json.dump(data, f, indent=2)
+
+
+def add_session(session_id: str, live_url: str | None, device: str, task: str | None = None):
+  """Add a session to the sessions file."""
+  from datetime import datetime, timezone
+
+  data = load_sessions()
+  data["sessions"].append({
+    "session_id": session_id,
+    "live_url": live_url,
+    "device": device,
+    "task": task,
+    "start_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+  })
+  save_sessions(data)
+
+
+def remove_session(session_id: str):
+  """Remove a session from the sessions file."""
+  data = load_sessions()
+  data["sessions"] = [s for s in data["sessions"] if s.get("session_id") != session_id]
+  save_sessions(data)
+
+
+def update_session_task(session_id: str, task: str | None):
+  """Update the task field for a session."""
+  data = load_sessions()
+  for session in data["sessions"]:
+    if session.get("session_id") == session_id:
+      session["task"] = task
+      break
+  save_sessions(data)
+
+
 def load_config() -> dict[str, Any]:
   """Load configuration from ~/.smooth/config.json."""
   config_path = get_config_path()
@@ -184,8 +241,8 @@ async def delete_file(args: argparse.Namespace):
 
 async def start_session(args: argparse.Namespace):
   """Start a browser session."""
+  client = SmoothAsyncClient()
   try:
-    client = SmoothAsyncClient()
     await client.__aenter__()
 
     # Parse allowed URLs
@@ -236,8 +293,8 @@ async def start_session(args: argparse.Namespace):
       if not args.json:
         print(f"Warning: Could not get live URL: {e}")
 
-    # Close the HTTP client (browser session keeps running on server)
-    await client.close()
+    # Track session in sessions.json
+    add_session(session_id=session_id, live_url=live_url, device=args.device, task=None)
 
     if args.json:
       result = {
@@ -259,6 +316,8 @@ async def start_session(args: argparse.Namespace):
     print_error(f"Failed to start session: {e.detail}", json_mode=args.json)
   except Exception as e:
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
+  finally:
+    await client.close()
 
 
 async def close_session(args: argparse.Namespace):
@@ -267,6 +326,10 @@ async def close_session(args: argparse.Namespace):
     async with SmoothAsyncClient() as client:
       session_handle = AsyncSessionHandle(args.session_id, client)
       await session_handle.close(force=args.force)
+
+      # Remove session from sessions.json
+      remove_session(args.session_id)
+
       if args.json:
         print_success(
           f"Session '{args.session_id}' closed successfully",
@@ -307,6 +370,9 @@ async def run_task(args: argparse.Namespace):
       if not args.json:
         print(f"Running task in session '{args.session_id}': {args.task}")
 
+      # Update session task in sessions.json
+      update_session_task(args.session_id, args.task)
+
       session_handle = AsyncSessionHandle(args.session_id, client)
 
       try:
@@ -317,12 +383,18 @@ async def run_task(args: argparse.Namespace):
           response_model=response_model,
           max_steps=args.max_steps,
         )
+
+        # Clear task (session is now idle)
+        update_session_task(args.session_id, None)
+
         if args.json:
           print_success("Task completed successfully", {"session_id": args.session_id, "result": result.output})
         else:
           print("\nTask completed. Result:")
           print(result.output)
       except Exception as e:
+        # Clear task on error as well
+        update_session_task(args.session_id, None)
         print_error(f"Failed to run task: {str(e)}", json_mode=args.json)
   except ApiError as e:
     print_error(f"Failed to run task: {e.detail}", json_mode=args.json)
@@ -412,24 +484,35 @@ async def extract(args: argparse.Namespace):
     async with SmoothAsyncClient() as client:
       session_handle = AsyncSessionHandle(args.session_id, client)
 
-      # Navigate to URL if provided
-      if args.url:
-        if not args.json:
-          print(f"Navigating to {args.url}...")
-        await session_handle.goto(args.url)
-        if not args.json:
-          print("Waiting 5 seconds for page to load...")
-        await asyncio.sleep(5)
+      # Update session task in sessions.json
+      update_session_task(args.session_id, "Extracting data")
 
-      if not args.json:
-        print(f"Extracting data from session '{args.session_id}'...")
-      result = await session_handle.extract(schema=cast(dict[str, Any], schema), prompt=args.prompt)
+      try:
+        # Navigate to URL if provided
+        if args.url:
+          if not args.json:
+            print(f"Navigating to {args.url}...")
+          await session_handle.goto(args.url)
+          if not args.json:
+            print("Waiting 5 seconds for page to load...")
+          await asyncio.sleep(5)
 
-      if args.json:
-        print_success("Data extracted successfully", {"session_id": args.session_id, "data": result.output})
-      else:
-        print("\nExtracted data:")
-        print(result.output)
+        if not args.json:
+          print(f"Extracting data from session '{args.session_id}'...")
+        result = await session_handle.extract(schema=cast(dict[str, Any], schema), prompt=args.prompt)
+
+        # Clear task (session is now idle)
+        update_session_task(args.session_id, None)
+
+        if args.json:
+          print_success("Data extracted successfully", {"session_id": args.session_id, "data": result.output})
+        else:
+          print("\nExtracted data:")
+          print(result.output)
+      except Exception as e:
+        # Clear task on error
+        update_session_task(args.session_id, None)
+        raise
 
   except ApiError as e:
     print_error(f"Failed to extract data: {e.detail}", json_mode=args.json)

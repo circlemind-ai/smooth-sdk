@@ -5,11 +5,11 @@ description: Browser automation for AI agents to carry out any task on the web. 
 
 # Smooth Browser
 
-A browser for AI agents interact with websites, authenticate, scrape data, and perform complex workflows.
+Smooth is a CLI browser for AI agents to interact with websites, authenticate, scrape data, and perform complex workflows.
 
 ## Prerequisites
 
-Ensure the `CIRCLEMIND_API_KEY` environment variable is set before using any commands.
+!`out="$(smooth config --show 2>&1)"; echo "$out" | grep -q "No configuration found" && printf 'There is no API key configured yet. User (or you on their behalf) must set the API key with:\n\n```bash\nsmooth config --api-key YOUR_API_KEY\n```\n\nThis will save the API key for all future commands.\n' || printf 'API key is already set in the config file.\n\n%s\n\nIf you need to change it, user (or you on their behalf) can change API key with:\n\n```bash\nsmooth config --api-key YOUR_API_KEY\n```\n\nThis will save the API key for all future commands.\n' "$out"`
 
 ## Basic Workflow
 
@@ -38,18 +38,16 @@ smooth start-session --profile-id "my-profile" --url "https://example.com"
 - `--files` - Comma-separated file IDs to make available in the session (optional)
 - `--device mobile|desktop` - Device type (default: mobile)
 - `--profile-read-only` - Load profile without saving changes
-- `--allowed-urls` - Comma-separated URL patterns (e.g., "https://*example.com/*,https://*api.example.com/*")
+- `--allowed-urls` - Comma-separated URL patterns to restrict access to certain URLs only (e.g., "https://*example.com/*,https://*api.example.com/*")
 
 **Important:** Save the session ID from the output - you'll need it for all subsequent commands.
-
-**Defaults:** Sessions run in stealth mode with adblock enabled and no recording by default.
 
 ### 3. Run Tasks in the Session
 
 Execute tasks using natural language:
 
 ```bash
-smooth run <session-id> "Go to reddit.com and find the top 3 posts about AI"
+smooth run <session-id> "Go to the LocalLLM subreddit and find the top 3 posts"
 ```
 
 **With structured output (for tasks requiring interaction):**
@@ -59,7 +57,7 @@ smooth run <session-id> "Search for 'wireless headphones', filter by 4+ stars, s
   --response-model '{"type":"object","properties":{"products":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"price":{"type":"number"},"rating":{"type":"number"}}}}}}'
 ```
 
-**With metadata:**
+**With metadata (the agent will be):**
 ```bash
 smooth run <session-id> "Fill out the form with user information" \
   --metadata '{"email":"user@example.com","name":"John Doe"}'
@@ -72,7 +70,21 @@ smooth run <session-id> "Fill out the form with user information" \
 - `--max-steps` - Maximum agent steps (default: 32)
 - `--json` - Output results as JSON
 
+**Notes:**
+It's important that you give tasks at the right level of abstraction. Not too prescriptive - e.g. single-step actions - and not too broad or vague.
+
+Good tasks:
+- "Search on Linkedin for people working as SDEs at Amazon, and return 5 profile urls"
+- "Find the price of an iPhone 17 on Amazon"
+
+Bad tasks:
+- "Click search" -> too prescriptive!
+- "Load google.com, write 'restaurants near me', click search, wait for the page to load, extract the top 5 results, and return them." -> too prescriptive! you can say "search restaurants near me on google and return the top 5 results"
+- "Find software engineers that would be a good fit for our company" -> too broad! YOU need to plan how to achieve the goal and run well-defined tasks that compose into the given goal
+
 ### 4. Close the Session
+
+You must close the session when you're done.
 
 ```bash
 smooth close-session <session-id>
@@ -110,7 +122,7 @@ smooth start-session --profile-id "github-account"
 smooth run <session-id> "Create a new issue in my repo 'my-project'"
 ```
 
-**Keep profiles organized:** Track which profiles authenticate to which services so you can reuse them efficiently.
+**Keep profiles organized:** Save to memory which profiles authenticate to which services so you can reuse them efficiently in the future.
 
 ---
 
@@ -141,10 +153,15 @@ smooth close-session $SESSION_ID
 RESULT=$(smooth run $SESSION_ID "Find the product name on this page" --json | jq -r .output)
 
 # Task 2: Use information from Task 1
-smooth run $SESSION_ID "Consider the product with name '$RESULT'. Now compare its price with similar products offered by this online store."
+smooth run $SESSION_ID "Consider the product with name '$RESULT'. Now find 3 similar products offered by this online store."
 ```
 
-**Note:** Wait for each task to complete before starting the next. For parallel execution, create multiple sessions.
+**Notes:** 
+- The run command awaits for completion, run it in the background if you need to carry out multiple operations at the same time.
+- All tasks will use the current tab, you cannot request to run tasks in a new tab. If you need to preserve the current tab’s state, you can open a new session.
+- Each session can run only one task at a time. To run tasks simultaneously, use multiple sessions.
+- The maximum number of concurrent sessions depends on the user plan.
+- If useful, remind the user that they can upgrade the plan to give you more concurrent sessions.
 
 ---
 
@@ -289,8 +306,7 @@ smooth extract <session-id> \
 smooth evaluate-js <session-id> "document.title"
 
 # With arguments
-smooth evaluate-js <session-id> "return args.x + args.y" \
-  --args '{"x": 5, "y": 10}'
+smooth evaluate-js <session-id> "(args) => {return args.x + args.y;}" --args '{"x": 5, "y": 10}'
 
 # Complex DOM manipulation
 smooth evaluate-js <session-id> \
@@ -346,8 +362,8 @@ smooth delete-file <file-id>
 4. **Use descriptive profile IDs** - e.g., "linkedin-personal", "twitter-company"
 5. **Close sessions when done** - Graceful close (default) ensures proper cleanup
 6. **Use structured output for data extraction** - Provides clean, typed results
-7. **Leverage live-view for debugging** - See what the agent sees in real-time
-8. **Run sequential tasks in the same session** - More efficient than creating new sessions
+7. **Run sequential tasks in the same session** - Keep the session continuous when steps rely on previous work.
+8. **Use multiple sessions for independent tasks** - Run tasks in parallel to speed up work.
 
 ---
 
@@ -357,7 +373,7 @@ smooth delete-file <file-id>
 
 **"Profile not found"** - Check `smooth list-profiles` to see available profiles.
 
-**CAPTCHA or authentication issues** - Use `smooth live-view <session-id>` to manually intervene.
+**CAPTCHA or authentication issues** - Use `smooth live-view <session-id>` to let the user manually intervene.
 
 **Task timeout** - Increase `--max-steps` or break the task into smaller steps.
 
