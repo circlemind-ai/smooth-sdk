@@ -260,7 +260,7 @@ async def start_session(args: argparse.Namespace):
     proxy_username = None
     proxy_password = None
     proxy_credentials = get_proxy_credentials()
-    if proxy_credentials:
+    if not proxy_server and proxy_credentials:
       proxy_server = proxy_credentials.url
       proxy_username = proxy_credentials.username
       proxy_password = proxy_credentials.password

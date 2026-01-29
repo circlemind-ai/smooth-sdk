@@ -278,3 +278,13 @@ proxies:
   def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
     """Context manager exit."""
     self.stop()
+
+
+# Proxy state persistence (stub for CLI compatibility)
+def get_proxy_credentials() -> None:
+  """Get credentials for a running proxy (if any).
+
+  Returns:
+      None - proxy state persistence not yet implemented.
+  """
+  return None
