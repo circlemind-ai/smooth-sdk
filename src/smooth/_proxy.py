@@ -162,21 +162,29 @@ class FRPProxy:
     """
     FRP_DIR.mkdir(parents=True, exist_ok=True)
 
-    config_path = FRP_DIR / f"frpc_{self.config.session_id}.ini"
+    config_path = FRP_DIR / f"frpc_{self.config.session_id}.yml"
+    # port should be changed when we use load balancing
+    yaml_content = f"""
+serverAddr: {self.config.server_url}
+serverPort: 7000
+auth:
+  method: token
+  token: "{self.config.token}"
 
-    ini_content = f"""[common]
-server_addr = 3.209.10.3
-server_port = 7000
-tls_enable = true
-protocol = websocket
-token = {self.config.token}
+transport:
+  protocol: "websocket"
+  tls:
+    enable: true
+    serverName: "{self.config.server_url}"
 
-[socks5_tunnel_{self.config.session_id}]
-type = tcp
-remote_port = {self.config.remote_port}
-plugin = socks5
+proxies:
+  - name: "socks5_tunnel_{self.config.session_id}"
+    type: "tcp"
+    remotePort: {self.config.remote_port}
+    plugin:
+      type: "socks5"
 """
-    config_path.write_text(ini_content)
+    config_path.write_text(yaml_content)
     return config_path
 
   def start(self) -> None:
@@ -202,8 +210,8 @@ plugin = socks5
         # Start process
         self._state.process = subprocess.Popen(
           cmd,
-          stdout=subprocess.PIPE,
-          stderr=subprocess.PIPE,
+          stdout=None,
+          stderr=None,
         )
 
         # Give it a moment to start and check if it failed immediately
