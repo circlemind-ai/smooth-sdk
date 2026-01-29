@@ -11,13 +11,14 @@ from typing import Any, cast
 from smooth import SmoothAsyncClient
 from smooth._exceptions import ApiError
 from smooth._interface import AsyncSessionHandle, AsyncTaskHandle
-from smooth._proxy import (
-  # clear_proxy_state,
-  get_proxy_credentials,
-  # is_proxy_running,
-  # load_proxy_state,
-  # save_proxy_state,
-)
+
+# from smooth._proxy import (
+#   clear_proxy_state,
+#   get_proxy_credentials,
+#   is_proxy_running,
+#   load_proxy_state,
+#   save_proxy_state,
+# )
 
 
 def print_json(data: Any):
@@ -255,17 +256,13 @@ async def start_session(args: argparse.Namespace):
     if args.files:
       files = [f.strip() for f in args.files.split(",")]
 
-    # Check for proxy credentials
-    proxy_server = None
+    # Configure proxy
+    proxy_server = None if args.no_proxy else args.proxy_server
     proxy_username = None
-    proxy_password = None
-    proxy_credentials = get_proxy_credentials()
-    if not proxy_server and proxy_credentials:
-      proxy_server = proxy_credentials.url
-      proxy_username = proxy_credentials.username
-      proxy_password = proxy_credentials.password
-      if not args.json:
-        print(f"Using proxy: {proxy_credentials.url}")
+    proxy_password = args.proxy_password if hasattr(args, "proxy_password") else None
+
+    if proxy_server and not args.json:
+      print(f"Using proxy: {proxy_server}")
 
     task_handle = await client.session(
       url=args.url,
@@ -734,6 +731,11 @@ def main():
   # start_session_parser.add_argument("--enable-recording", action="store_true", help="Enable video recording")
   # start_session_parser.add_argument("--no-stealth-mode", action="store_true", help="Disable stealth mode")
   # start_session_parser.add_argument("--no-adblock", action="store_true", help="Disable adblock")
+  start_session_parser.add_argument(
+    "--proxy-server", default="self", help="Proxy server address ('self' for local tunnel, default: self)"
+  )
+  start_session_parser.add_argument("--proxy-password", help="Proxy password (auto-generated if not provided)")
+  start_session_parser.add_argument("--no-proxy", action="store_true", help="Disable proxy (overrides --proxy-server)")
   start_session_parser.add_argument("--json", action="store_true", help="Output as JSON")
   start_session_parser.set_defaults(func=start_session)
 
