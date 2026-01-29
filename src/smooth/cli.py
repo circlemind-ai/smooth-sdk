@@ -336,14 +336,14 @@ def get_session(session_id: str) -> dict[str, Any] | None:
   return None
 
 
-def kill_proxy_process(pid: int) -> bool:
+def kill_proxy_process(pid: int | str) -> bool:
   """Kill a proxy process by PID."""
   import signal
 
   try:
-    os.kill(pid, signal.SIGTERM)
+    os.kill(int(pid), signal.SIGTERM)
     return True
-  except (ProcessLookupError, PermissionError):
+  except (ProcessLookupError, PermissionError, ValueError):
     return False
 
 
