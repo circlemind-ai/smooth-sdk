@@ -176,16 +176,14 @@ class AsyncTaskHandle(BaseTaskHandle):
 
   def _start_proxy(
     self,
-    server_ip: str,
-    server_port: int,
+    server_url: str,
     token: str,
     remote_port: int = 1080,
   ) -> None:
     """Start a proxy tunnel for this task/session.
 
     Args:
-        server_ip: IP address of the FRP server.
-        server_port: Port the FRP server is listening on.
+        server_url: IP address of the FRP server.
         token: Authentication token for the FRP server.
         remote_port: Remote port on the FRP server (default 1080).
 
@@ -196,8 +194,7 @@ class AsyncTaskHandle(BaseTaskHandle):
       raise RuntimeError(f"Proxy for task {self._id} is already running")
 
     config = ProxyConfig(
-      server_ip=server_ip,
-      server_port=server_port,
+      server_url=server_url,
       token=token,
       remote_port=remote_port,
       session_id=self._id,
@@ -486,8 +483,8 @@ class TaskHandle(BaseTaskHandle):
     """Returns the downloads URL for the task."""
     return self._run_async(self._async_handle.downloads_url(timeout))
 
-  def _start_proxy(self, server_ip: str, server_port: int, token: str, remote_port: int = 1080) -> None:
-    return self._async_handle._start_proxy(server_ip, server_port, token, remote_port)
+  def _start_proxy(self, server_url: str, token: str, remote_port: int = 1080) -> None:
+    return self._async_handle._start_proxy(server_url, token, remote_port)
 
   def goto(self, url: str) -> Any:
     """Navigates to the given URL."""

@@ -32,8 +32,7 @@ FRP_DIR = Path.home() / ".smooth" / "frp"
 class ProxyConfig:
   """Configuration for the FRP proxy tunnel."""
 
-  server_ip: str
-  server_port: int
+  server_url: str
   token: str
   remote_port: int = 1080
   session_id: str = "default"
@@ -166,8 +165,10 @@ class FRPProxy:
     config_path = FRP_DIR / f"frpc_{self.config.session_id}.ini"
 
     ini_content = f"""[common]
-server_addr = {self.config.server_ip}
-server_port = {self.config.server_port}
+server_addr = 3.209.10.3
+server_port = 7000
+tls_enable = true
+protocol = websocket
 token = {self.config.token}
 
 [socks5_tunnel_{self.config.session_id}]
@@ -207,14 +208,18 @@ plugin = socks5
 
         # Give it a moment to start and check if it failed immediately
         try:
-          return_code = self._state.process.wait(timeout=1.0)
-          # Process exited, something went wrong
-          stderr = self._state.process.stderr.read().decode() if self._state.process.stderr else ""
-          self._cleanup()
-          raise RuntimeError(f"FRP process exited immediately with code {return_code}: {stderr}")
+            # Wait for the process to exit or timeout
+            stdout_data, stderr_data = self._state.process.communicate(timeout=1.0)
+
+            # If we get here, the process exited within 1 second
+            stderr = stderr_data.decode() if stderr_data else ""
+            stdout = stdout_data.decode() if stdout_data else ""
+            self._cleanup()
+            raise RuntimeError(f"FRP process exited immediately: {stderr}. Output: {stdout}")
+
         except subprocess.TimeoutExpired:
-          # Process is still running, good
-          pass
+            # Process is still running after 1 second
+            pass
 
       except Exception as e:
         self._cleanup()
