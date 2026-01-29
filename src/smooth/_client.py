@@ -3,6 +3,7 @@ import asyncio
 import inspect
 import io
 import os
+import secrets
 import threading
 from pathlib import Path
 from typing import Any, Callable, Coroutine, Literal, Sequence, Type, TypedDict, TypeVar, cast
@@ -168,6 +169,11 @@ class SmoothClient(BaseClient):
     show_cursor: bool = False,
   ) -> SessionHandle:
     """Opens a browser session."""
+    # Handle proxy_server="self" - auto-start local proxy tunnel
+    auto_start_proxy = proxy_server == "self"
+    if auto_start_proxy and proxy_password is None:
+      proxy_password = secrets.token_urlsafe(12)
+
     task_handle = self.run(
       task=None,  # type: ignore
       url=url,
@@ -192,7 +198,15 @@ class SmoothClient(BaseClient):
     )
 
     tools = cast(dict[str, SmoothTool] | None, task_handle._async_handle._tools)
-    return SessionHandle(task_handle._id, self, tools=list(tools.values()) if tools else None)
+    handle = SessionHandle(task_handle._id, self, tools=list(tools.values()) if tools else None)
+
+    # Auto-start proxy immediately if configured
+    if auto_start_proxy:
+      proxy_ip = handle.ip(timeout=30)
+      if proxy_ip:
+        handle._start_proxy(proxy_ip, proxy_password)  # type: ignore[arg-type]
+
+    return handle
 
   def run(
     self,
@@ -610,6 +624,11 @@ class SmoothAsyncClient(BaseClient):
     show_cursor: bool = False,
   ):
     """Opens a browser session."""
+    # Handle proxy_server="self" - auto-start local proxy tunnel
+    auto_start_proxy = proxy_server == "self"
+    if auto_start_proxy and proxy_password is None:
+      proxy_password = secrets.token_urlsafe(12)
+
     task_handle = await self.run(
       task=None,  # type: ignore
       url=url,
@@ -633,7 +652,15 @@ class SmoothAsyncClient(BaseClient):
       show_cursor=show_cursor,
     )
 
-    return AsyncSessionHandle(task_handle._id, self, tools=list(task_handle._tools.values()) if task_handle._tools else None)
+    handle = AsyncSessionHandle(task_handle._id, self, tools=list(task_handle._tools.values()) if task_handle._tools else None)
+
+    # Auto-start proxy immediately if configured
+    if auto_start_proxy:
+      proxy_ip = await handle.ip(timeout=30)
+      if proxy_ip:
+        handle._start_proxy(proxy_ip, proxy_password)  # type: ignore[arg-type]
+
+    return handle
 
   async def run(
     self,

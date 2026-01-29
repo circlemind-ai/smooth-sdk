@@ -119,6 +119,25 @@ class AsyncTaskHandle(BaseTaskHandle):
 
     raise TimeoutError(f"Live URL not available for task {self.id()}.")
 
+  async def ip(self, timeout: int | None = None) -> str | None:
+    """Returns the proxy IP for the session."""
+    if self._task_response:
+      # API returns "_ip" field
+      ip_value = getattr(self._task_response, "_ip", None)
+      if ip_value:
+        return ip_value
+
+    loop = asyncio.get_running_loop()
+    async with self._connection():
+      start_time = loop.time()
+      while timeout is None or (loop.time() - start_time) < timeout:
+        if self._task_response:
+          ip_value = getattr(self._task_response, "_ip", None)
+          if ip_value:
+            return ip_value
+        await asyncio.sleep(0.2)
+    return None
+
   async def recording_url(self, timeout: int | None = 30) -> str:
     """Returns the recording URL for the task."""
     if self._task_response and self._task_response.recording_url is not None:
@@ -411,6 +430,8 @@ class AsyncSessionHandle(AsyncTaskHandle):
 
   async def close(self, force: bool = True):
     """Closes the session."""
+    # Stop proxy if running
+    self._stop_proxy()
     if not force:
       event = TaskEvent(
         name="session_action",
@@ -474,6 +495,10 @@ class TaskHandle(BaseTaskHandle):
   def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None) -> str:
     """Returns the live URL for the task."""
     return self._run_async(self._async_handle.live_url(interactive, embed, timeout))
+
+  def ip(self, timeout: int | None = None) -> str | None:
+    """Returns the proxy IP for the session."""
+    return self._run_async(self._async_handle.ip(timeout))
 
   def recording_url(self, timeout: int | None = None) -> str:
     """Returns the recording URL for the task."""
