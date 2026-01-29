@@ -79,18 +79,21 @@ def save_sessions(data: dict[str, Any]):
     json.dump(data, f, indent=2)
 
 
-def add_session(session_id: str, live_url: str | None, device: str, task: str | None = None):
+def add_session(session_id: str, live_url: str | None, device: str, task: str | None = None, proxy_pid: int | None = None):
   """Add a session to the sessions file."""
   from datetime import datetime, timezone
 
   data = load_sessions()
-  data["sessions"].append({
+  session_data = {
     "session_id": session_id,
     "live_url": live_url,
     "device": device,
     "task": task,
     "start_time": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-  })
+  }
+  if proxy_pid:
+    session_data["proxy_pid"] = str(proxy_pid)
+  data["sessions"].append(session_data)
   save_sessions(data)
 
 
@@ -282,16 +285,23 @@ async def start_session(args: argparse.Namespace):
 
     session_id = task_handle.id()
 
-    # Get live URL
+    # Get live URLs (embed=True for sessions.json, embed=False for CLI output)
     live_url = None
+    live_url_embed = None
     try:
-      live_url = await task_handle.live_url(interactive=True, timeout=30)
+      live_url = await task_handle.live_url(interactive=True, embed=False, timeout=30)
+      live_url_embed = await task_handle.live_url(interactive=True, embed=True, timeout=30)
     except Exception as e:
       if not args.json:
         print(f"Warning: Could not get live URL: {e}")
 
-    # Track session in sessions.json
-    add_session(session_id=session_id, live_url=live_url, device=args.device, task=None)
+    # Get proxy PID if running
+    proxy_pid = None
+    if task_handle._proxy and task_handle._proxy._state.process:  # pyright: ignore[reportPrivateUsage]
+      proxy_pid = task_handle._proxy._state.process.pid  # pyright: ignore[reportPrivateUsage]
+
+    # Track session in sessions.json (with embed=True URL)
+    add_session(session_id=session_id, live_url=live_url_embed, device=args.device, task=None, proxy_pid=proxy_pid)
 
     if args.json:
       result = {
@@ -317,9 +327,36 @@ async def start_session(args: argparse.Namespace):
     await client.close()
 
 
+def get_session(session_id: str) -> dict[str, Any] | None:
+  """Get a session by ID from the sessions file."""
+  data = load_sessions()
+  for session in data.get("sessions", []):
+    if session.get("session_id") == session_id:
+      return session
+  return None
+
+
+def kill_proxy_process(pid: int) -> bool:
+  """Kill a proxy process by PID."""
+  import signal
+
+  try:
+    os.kill(pid, signal.SIGTERM)
+    return True
+  except (ProcessLookupError, PermissionError):
+    return False
+
+
 async def close_session(args: argparse.Namespace):
   """Close a browser session."""
   try:
+    # Kill proxy process if it exists
+    session_data = get_session(args.session_id)
+    if session_data and session_data.get("proxy_pid"):
+      if kill_proxy_process(session_data["proxy_pid"]):
+        if not args.json:
+          print("Stopped local proxy tunnel.")
+
     async with SmoothAsyncClient() as client:
       session_handle = AsyncSessionHandle(args.session_id, client)
       await session_handle.close(force=args.force)
