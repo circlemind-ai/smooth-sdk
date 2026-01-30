@@ -274,7 +274,7 @@ async def start_session(args: argparse.Namespace):
       profile_read_only=args.profile_read_only,
       device=args.device,
       allowed_urls=allowed_urls,
-      enable_recording=False,  # Disabled by default
+      enable_recording=True,  # Enabled by default
       stealth_mode=True,  # Enabled by default
       use_adblock=True,  # Enabled by default
       proxy_server=proxy_server,
@@ -356,8 +356,12 @@ async def close_session(args: argparse.Namespace):
       if kill_proxy_process(session_data["proxy_pid"]):
         if not args.json:
           print("Stopped local proxy tunnel.")
-    except Exception:
-      pass  # Ignore proxy kill errors
+      else:
+        if not args.json:
+          print("Warning: Could not stop local proxy tunnel (process may have already exited).")
+    except Exception as e:
+      if not args.json:
+        print(f"Warning: Failed to stop local proxy tunnel: {e}")
 
   # Try to close the session on the server
   api_error = None
@@ -371,7 +375,11 @@ async def close_session(args: argparse.Namespace):
     api_error = f"Unexpected error: {str(e)}"
 
   # Always remove from sessions.json (even if API call failed, local cleanup should happen)
-  remove_session(args.session_id)
+  try:
+    remove_session(args.session_id)
+  except Exception as e:
+    if not args.json:
+      print(f"Warning: Failed to remove session from local tracking: {e}")
 
   # Report result
   if api_error:
