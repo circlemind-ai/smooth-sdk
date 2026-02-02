@@ -167,9 +167,13 @@ class FRPProxy:
     yaml_content = f"""
 serverAddr: {self.config.server_url}
 serverPort: 443
+loginFailExit: false
 auth:
   method: token
   token: "{self.config.token}"
+
+log:
+  level: "error"
 
 transport:
   protocol: "wss"
@@ -204,7 +208,7 @@ proxies:
         # Build command
         cmd = [str(self._bin_path), "-c", str(self._state.config_file)]
 
-        # Start process
+        # Start process with suppressed output
         self._state.process = subprocess.Popen(
           cmd,
           stdout=subprocess.DEVNULL,

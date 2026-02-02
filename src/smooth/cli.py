@@ -12,14 +12,6 @@ from smooth import SmoothAsyncClient
 from smooth._exceptions import ApiError
 from smooth._interface import AsyncSessionHandle, AsyncTaskHandle
 
-# from smooth._proxy import (
-#   clear_proxy_state,
-#   get_proxy_credentials,
-#   is_proxy_running,
-#   load_proxy_state,
-#   save_proxy_state,
-# )
-
 
 def print_json(data: Any):
   """Print data as formatted JSON."""
@@ -260,9 +252,14 @@ async def start_session(args: argparse.Namespace):
       files = [f.strip() for f in args.files.split(",")]
 
     # Configure proxy
-    proxy_server = None if args.no_proxy else args.proxy_server
-    proxy_username = None
-    proxy_password = args.proxy_password if hasattr(args, "proxy_password") else None
+    if args.no_proxy:
+      proxy_server = None
+      proxy_username = None
+      proxy_password = None
+    else:
+      proxy_server = args.proxy_server
+      proxy_username = None
+      proxy_password = args.proxy_password if hasattr(args, "proxy_password") else None
 
     if proxy_server and not args.json:
       print(f"Using proxy: {proxy_server}")
@@ -600,100 +597,14 @@ async def evaluate_js(args: argparse.Namespace):
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
-# def start_proxy(args: argparse.Namespace):
-#   """Start a local proxy with public tunnel exposure."""
-#   # Check if proxy is already running
-#   if is_proxy_running():
-#     creds = load_proxy_state()
-#     if creds:
-#       print("Proxy is already running!")
-#     return
-
-#   # Create client and start proxy using client method
-#   client = SmoothClient()
-
-#   def signal_handler(sig: Any, frame: Any):
-#     print("\nStopping proxy...")
-#     try:
-#       client.stop_proxy()
-#     except Exception:
-#       pass
-#     clear_proxy_state()
-#     sys.exit(0)
-
-#   signal.signal(signal.SIGINT, signal_handler)
-#   signal.signal(signal.SIGTERM, signal_handler)
-
-#   print(f"Starting proxy on port {args.port} with {args.provider} tunnel...")
-
-#   try:
-#     # Start proxy using client method
-#     proxy_config = client.start_proxy(
-#       provider=args.provider,
-#       port=args.port,
-#       timeout=args.timeout,
-#       verbose=args.verbose,
-#     )
-
-#     print(f"Proxy config: {proxy_config}")
-
-#     # Save state for CLI management
-#     from smooth._proxy import ProxyCredentials
-
-#     credentials = ProxyCredentials(
-#       url=proxy_config["proxy_server"],
-#       username=proxy_config["proxy_username"],
-#       password=proxy_config["proxy_password"],
-#       local_port=args.port,
-#       pid=os.getpid(),  # Store PID so proxy-status can detect running proxy
-#     )
-#     save_proxy_state(credentials)
-
-#     print("\nProxy is running!")
-#     print("\nThe proxy will be automatically used by 'smooth start-session'.")
-#     print("Press Ctrl+C to stop.\n")
-
-#     # Keep process alive
-#     signal.pause()
-
-#   except Exception as e:
-#     print(f"Error: {e}")
-#     clear_proxy_state()
-#     sys.exit(1)
-
-
-# def proxy_status(args: argparse.Namespace):
-#   """Show the status of the proxy."""
-#   if is_proxy_running():
-#     creds = load_proxy_state()
-#     if creds:
-#       if args.json:
-#         print_success(
-#           "Proxy is running",
-#           {
-#             "running": True,
-#             "url": creds.url,
-#             "username": creds.username,
-#             "password": creds.password,
-#           }
-#         )
-#       else:
-#         print("Proxy is running!")
-#         print(f"  URL:      {creds.url}")
-#         print(f"  Username: {creds.username}")
-#         print(f"  Password: {creds.password}")
-#   else:
-#     if args.json:
-#       print_json({"success": True, "message": "No proxy is currently running", "running": False})
-#     else:
-#       print("No proxy is currently running.")
-
-
 def config_command(args: argparse.Namespace):
   """Configure the Smooth CLI."""
   config = load_config()
 
   if args.api_key:
+    if args.api_key == "YOUR_API_KEY":
+      print_error("Please use a real API key. Get yours at https://app.smooth.sh")
+      return
     config["api_key"] = args.api_key
     save_config(config)
     if args.json:
@@ -846,25 +757,6 @@ def main():
   evaluate_js_parser.add_argument("--args", help="JSON object with arguments to pass to the code")
   evaluate_js_parser.add_argument("--json", action="store_true", help="Output as JSON")
   evaluate_js_parser.set_defaults(func=evaluate_js)
-
-  # start-proxy command
-  # start_proxy_parser = subparsers.add_parser("start-proxy", help="Start a local proxy with public tunnel exposure")
-  # start_proxy_parser.add_argument(
-  #   "--provider",
-  #   choices=["cloudflare", "serveo", "microsoft"],
-  #   default="cloudflare",
-  #   help="Tunnel provider (default: cloudflare)",
-  # )
-  # start_proxy_parser.add_argument("--port", type=int, default=59438, help="Local port (default: 8888)")
-  # start_proxy_parser.add_argument("--timeout", type=int, default=30, help="Tunnel timeout in seconds (default: 30)")
-  # start_proxy_parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
-  # start_proxy_parser.add_argument("--tcp", action="store_true", help="Use TCP mode (serveo only)")
-  # start_proxy_parser.set_defaults(func=start_proxy)
-
-  # # proxy-status command
-  # proxy_status_parser = subparsers.add_parser("proxy-status", help="Show the status of the proxy")
-  # proxy_status_parser.add_argument("--json", action="store_true", help="Output as JSON")
-  # proxy_status_parser.set_defaults(func=proxy_status)
 
   # Parse arguments
   args = parser.parse_args()
