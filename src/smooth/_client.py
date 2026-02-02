@@ -54,8 +54,12 @@ def _get_proxy_url(live_url: str) -> str:
 
   parsed = urlparse(live_url)
   query = parse_qs(parsed.query)
-  proxy_url = base64.b64decode(q).decode().split("https://", 1)[-1] if (q := query.get("b", [None])[0]) else None
-  if proxy_url:
+  q = query.get("b", [None])[0]
+  if q:
+    # Add padding if needed (base64 strings must be multiple of 4)
+    padded = q + "=" * (-len(q) % 4)
+    # Use urlsafe_b64decode for URL-safe base64 encoding
+    proxy_url = base64.urlsafe_b64decode(padded).decode().split("https://", 1)[-1]
     return proxy_url.replace("browser-live", "browser-proxy").split("?", 1)[0].strip("/")
   else:
     raise RuntimeError("No proxy URL provided.")
