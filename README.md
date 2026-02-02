@@ -149,7 +149,6 @@ smooth config --api-key <your-key>
 
 ## Links
 
-- [Documentation](https://docs.smooth.sh)
+- [Documentation & SDK](https://docs.smooth.sh)
 - [CLI Guide](https://docs.smooth.sh/cli)
-- [SDK Reference](https://docs.smooth.sh/sdk)
 - [Get API Key](https://app.smooth.sh)
