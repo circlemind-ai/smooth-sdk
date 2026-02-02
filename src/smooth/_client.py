@@ -48,6 +48,19 @@ class ProxyConfig(TypedDict):
   proxy_password: str
 
 
+def _get_proxy_url(live_url: str) -> str:
+  import base64
+  from urllib.parse import parse_qs, urlparse
+
+  parsed = urlparse(live_url)
+  query = parse_qs(parsed.query)
+  proxy_url = base64.b64decode(q).decode().split("https://", 1)[-1] if (q := query.get("b", [None])[0]) else None
+  if proxy_url:
+    return proxy_url.replace("browser-live", "browser-proxy").split("?", 1)[0].strip("/")
+  else:
+    raise RuntimeError("No proxy URL provided.")
+
+
 # --- Base Client ---
 
 
@@ -75,7 +88,7 @@ class BaseClient:
     self.base_url = f"{base_url.rstrip('/')}/{api_version}"
     self.headers = {
       "apikey": self.api_key,
-      "User-Agent": "smooth-python-sdk/0.3.6",
+      "User-Agent": "smooth-python-sdk/0.4.0",
     }
 
   async def _handle_response(self, response: aiohttp.ClientResponse) -> dict[str, Any]:
@@ -170,8 +183,8 @@ class SmoothClient(BaseClient):
   ) -> SessionHandle:
     """Opens a browser session."""
     # Handle proxy_server="self" - auto-start local proxy tunnel
-    auto_start_proxy = proxy_server == "self"
-    if auto_start_proxy and proxy_password is None:
+    self_proxy = proxy_server == "self"
+    if self_proxy and not proxy_password:
       proxy_password = secrets.token_urlsafe(12)
 
     task_handle = self.run(
@@ -201,10 +214,12 @@ class SmoothClient(BaseClient):
     handle = SessionHandle(task_handle._id, self, tools=list(tools.values()) if tools else None)
 
     # Auto-start proxy immediately if configured
-    if auto_start_proxy:
-      proxy_ip = handle.ip(timeout=30)
-      if proxy_ip:
-        handle._start_proxy(proxy_ip, proxy_password)  # type: ignore[arg-type]
+    if self_proxy:
+      try:
+        proxy_url = _get_proxy_url(handle.live_url(timeout=30))
+        handle._start_proxy(proxy_url, cast(str, proxy_password))
+      except Exception as e:
+        raise RuntimeError("Failed to start self-proxy.") from e
 
     return handle
 
@@ -625,8 +640,8 @@ class SmoothAsyncClient(BaseClient):
   ):
     """Opens a browser session."""
     # Handle proxy_server="self" - auto-start local proxy tunnel
-    auto_start_proxy = proxy_server == "self"
-    if auto_start_proxy and proxy_password is None:
+    self_proxy = proxy_server == "self"
+    if self_proxy and proxy_password is None:
       proxy_password = secrets.token_urlsafe(12)
 
     task_handle = await self.run(
@@ -655,10 +670,12 @@ class SmoothAsyncClient(BaseClient):
     handle = AsyncSessionHandle(task_handle._id, self, tools=list(task_handle._tools.values()) if task_handle._tools else None)
 
     # Auto-start proxy immediately if configured
-    if auto_start_proxy:
-      proxy_ip = await handle.ip(timeout=30)
-      if proxy_ip:
-        handle._start_proxy(proxy_ip, proxy_password)  # type: ignore[arg-type]
+    if self_proxy:
+      try:
+        proxy_url = _get_proxy_url(await handle.live_url(timeout=30))
+        handle._start_proxy(proxy_url, cast(str, proxy_password))
+      except Exception as e:
+        raise RuntimeError("Failed to start self-proxy.") from e
 
     return handle
 
@@ -942,75 +959,6 @@ class SmoothAsyncClient(BaseClient):
     except aiohttp.ClientError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
-
-  # --- Proxy Methods --- #
-
-  # def start_proxy(
-  #   self,
-  #   provider: Literal["cloudflare", "serveo", "microsoft"] = "cloudflare",
-  #   port: int = 8888,
-  #   timeout: int = 30,
-  #   verbose: bool = False,
-  #   username: str | None = None,
-  #   password: str | None = None,
-  # ) -> ProxyConfig:
-  #   """Start a local proxy server with public tunnel exposure.
-
-  #   The proxy runs in a background thread and can be stopped with stop_proxy().
-  #   Returns a dict with proxy credentials that can be unpacked into session/run methods.
-
-  #   Example:
-  #       proxy_config = client.start_proxy()
-  #       await client.session(**proxy_config)
-  #       # ... use the session ...
-  #       client.stop_proxy()
-
-  #   Args:
-  #       provider: Tunnel provider ("cloudflare", "serveo", or "microsoft").
-  #       port: Local port for the proxy server.
-  #       timeout: Tunnel timeout in seconds.
-  #       verbose: Enable verbose output.
-  #       username: Optional proxy username. If not provided, randomly generated.
-  #       password: Optional proxy password. If not provided, randomly generated.
-
-  #   Returns:
-  #       ProxyConfig dict with keys: proxy_server, proxy_username, proxy_password
-
-  #   Raises:
-  #       RuntimeError: If proxy is already running or fails to start.
-  #   """
-  #   if self._proxy is not None and self._proxy.is_running:
-  #     raise RuntimeError("Proxy is already running. Call stop_proxy() first.")
-
-  #   config = TunnelConfig(
-  #     provider=provider,
-  #     port=port,
-  #     timeout=timeout,
-  #     verbose=verbose,
-  #     username=username,
-  #     password=password,
-  #   )
-
-  #   self._proxy = LocalProxy(config)
-  #   credentials = self._proxy.start()
-
-  #   return ProxyConfig(
-  #     proxy_server=credentials.url,
-  #     proxy_username=credentials.username,
-  #     proxy_password=credentials.password,
-  #   )
-
-  # def stop_proxy(self):
-  #   """Stop the running proxy server.
-
-  #   Raises:
-  #       RuntimeError: If no proxy is currently running.
-  #   """
-  #   if self._proxy is None or not self._proxy.is_running:
-  #     raise RuntimeError("No proxy is currently running.")
-
-  #   self._proxy.stop()
-  #   self._proxy = None
 
   # --- Private Methods ---
 

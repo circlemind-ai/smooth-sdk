@@ -119,25 +119,6 @@ class AsyncTaskHandle(BaseTaskHandle):
 
     raise TimeoutError(f"Live URL not available for task {self.id()}.")
 
-  async def ip(self, timeout: int | None = None) -> str | None:
-    """Returns the proxy IP for the session."""
-    if self._task_response:
-      # API returns "_ip" field
-      ip_value = getattr(self._task_response, "_ip", None)
-      if ip_value:
-        return ip_value
-
-    loop = asyncio.get_running_loop()
-    async with self._connection():
-      start_time = loop.time()
-      while timeout is None or (loop.time() - start_time) < timeout:
-        if self._task_response:
-          ip_value = getattr(self._task_response, "_ip", None)
-          if ip_value:
-            return ip_value
-        await asyncio.sleep(0.2)
-    return None
-
   async def recording_url(self, timeout: int | None = 30) -> str:
     """Returns the recording URL for the task."""
     if self._task_response and self._task_response.recording_url is not None:
@@ -196,15 +177,13 @@ class AsyncTaskHandle(BaseTaskHandle):
   def _start_proxy(
     self,
     server_url: str,
-    token: str,
-    remote_port: int = 1080,
+    token: str
   ) -> None:
     """Start a proxy tunnel for this task/session.
 
     Args:
         server_url: IP address of the FRP server.
         token: Authentication token for the FRP server.
-        remote_port: Remote port on the FRP server (default 1080).
 
     Raises:
         RuntimeError: If a proxy is already running for this handle.
@@ -215,7 +194,6 @@ class AsyncTaskHandle(BaseTaskHandle):
     config = ProxyConfig(
       server_url=server_url,
       token=token,
-      remote_port=remote_port,
       session_id=self._id,
     )
     self._proxy = FRPProxy(config)
@@ -496,10 +474,6 @@ class TaskHandle(BaseTaskHandle):
     """Returns the live URL for the task."""
     return self._run_async(self._async_handle.live_url(interactive, embed, timeout))
 
-  def ip(self, timeout: int | None = None) -> str | None:
-    """Returns the proxy IP for the session."""
-    return self._run_async(self._async_handle.ip(timeout))
-
   def recording_url(self, timeout: int | None = None) -> str:
     """Returns the recording URL for the task."""
     return self._run_async(self._async_handle.recording_url(timeout))
@@ -508,8 +482,8 @@ class TaskHandle(BaseTaskHandle):
     """Returns the downloads URL for the task."""
     return self._run_async(self._async_handle.downloads_url(timeout))
 
-  def _start_proxy(self, server_url: str, token: str, remote_port: int = 1080) -> None:
-    return self._async_handle._start_proxy(server_url, token, remote_port)
+  def _start_proxy(self, server_url: str, token: str) -> None:
+    return self._async_handle._start_proxy(server_url, token)
 
   def goto(self, url: str) -> Any:
     """Navigates to the given URL."""
