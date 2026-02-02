@@ -1,4 +1,4 @@
-# Smooth - Browser automation for AI
+# Smooth
 
 ![Comparison](https://www.smooth.sh/images/comparison.gif)
 
