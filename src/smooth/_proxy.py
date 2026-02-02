@@ -166,16 +166,13 @@ class FRPProxy:
     # port should be changed when we use load balancing
     yaml_content = f"""
 serverAddr: {self.config.server_url}
-serverPort: 7000
+serverPort: 443
 auth:
   method: token
   token: "{self.config.token}"
 
 transport:
-  protocol: "websocket"
-  tls:
-    enable: true
-    serverName: "{self.config.server_url}"
+  protocol: "wss"
 
 proxies:
   - name: "socks5_tunnel_{self.config.session_id}"
@@ -210,8 +207,8 @@ proxies:
         # Start process
         self._state.process = subprocess.Popen(
           cmd,
-          stdout=None,
-          stderr=None,
+          stdout=subprocess.DEVNULL,
+          stderr=subprocess.DEVNULL,
         )
 
         # Give it a moment to start and check if it failed immediately
