@@ -1,14 +1,25 @@
-# Smooth - Browser for AI Agents
+# Smooth - Browser automation for AI
 
 ![Comparison](https://www.smooth.sh/images/comparison.gif)
 
-**TL;DR:** Smooth is a browser for AI agents, enabling tools like Claude Code to navigate the web quickly, cheaply, and reliably. It can use your IP address to avoid captchas.
+**TL;DR:** Smooth is an AI browser automation framework that can act and extract information from the web. It's powered by our browser agent which controls the browser with mouse and keyboard to carry out tasks autonomously on the web.
 
-[Demo](https://docs.smooth.sh) · [Documentation](https://docs.smooth.sh) · [Get API Key](https://app.smooth.sh)
+[Discord](https://discord.com/invite/VcdgMwUmMG) · [Documentation](https://docs.smooth.sh) · [Get API Key](https://app.smooth.sh)
 
 ---
 
-## Why Smooth?
+## Table of Contents
+
+- [CLI](#cli)
+- [Python SDK](#python-sdk)
+
+---
+
+## CLI
+
+The Smooth CLI is a browser for AI agents, enabling tools like Claude Code to navigate the web quickly, cheaply, and reliably. **It can use your IP address to avoid captchas.**
+
+### Why Smooth?
 
 Autonomous agents like Claude Code are amazing at meaningful work—but they're mostly stuck in the CLI. Meanwhile, most valuable human work happens in the browser.
 
@@ -24,26 +35,36 @@ Smooth solves this with a higher-level interface designed for how agents actuall
 
 **Today, Smooth is 20x faster and 5x cheaper than Claude Code with `--chrome`.**
 
----
-
-## Table of Contents
-
-- [CLI](#cli)
-- [Python SDK](#python-sdk)
-- [Authentication](#authentication)
-
----
-
-## CLI
-
-The Smooth CLI lets AI agents browse the web through simple commands.
+Get your API key at [app.smooth.sh](https://app.smooth.sh) and then run:
 
 ```bash
 pip install smooth-py
 smooth config --api-key <your-key>
+npx skills add https://github.com/circlemind-ai/smooth-sdk
 ```
 
 **Full CLI documentation:** [docs.smooth.sh/cli](https://docs.smooth.sh/cli)
+
+### How It Works
+
+Instead of this:
+
+```bash
+click(x=342, y=128)
+type("search query")
+click(x=401, y=130)
+scroll(down=500)
+click(x=220, y=340)
+... (50 more steps)
+```
+
+Your agent just says:
+
+```bash
+"Search for flights from NYC to LA and find the cheapest option"
+```
+
+The agent thinks about your goals. Smooth handles the browser.
 
 ### Quick Example
 
@@ -58,11 +79,28 @@ smooth run <session-id> "Find the pricing page and extract all plan names and pr
 smooth close-session <session-id>
 ```
 
+**Pro Tip:** You can also give your agent complex goals. Our skill will teach your agent how to break them into subtasks and distribute them across multiple concurrent browser sessions automatically.
+
+### Works With
+
+- Claude Code
+- Clawdbot / Moltbot / OpenClaw
+- Codex
+- Cursor
+- Antigravity
+- Cline
+- Factory AI
+- Github Copilot
+- Kiro
+- OpenCode
+- Windsurf
+- Any other agent that can run CLI commands
+
 ---
 
 ## Python SDK
 
-Use Smooth programmatically in your Python applications.
+Use our Smooth SDK to automate any digital work.
 
 ```bash
 pip install smooth-py
@@ -75,29 +113,16 @@ pip install smooth-py
 ```python
 from smooth import SmoothClient
 
-with SmoothClient(api_key="your-api-key") as client:
-    task = client.run(
-        task="Go to Hacker News and get the top 5 story titles",
-        device="desktop"
-    )
-    result = task.result()
-    print(result.output)
+smooth_client = SmoothClient(api_key="cmzr-YOUR_API_KEY")
+task = smooth_client.run("Go to google flights and find the cheapest flight from London to Paris today")
+
+print(f"Live URL: {task.live_url()}")
+print(f"Agent response: {task.result()}")
 ```
 
-### Async Support
+We have async clients, persistent sessions, auto-captcha solvers, stealth mode, infinite scaling, and much more. Dive deep in the docs, it's fun.
 
-```python
-import asyncio
-from smooth import SmoothAsyncClient
-
-async def main():
-    async with SmoothAsyncClient() as client:
-        task = await client.run(task="Search for 'AI agents' on Google")
-        result = await task.result()
-        print(result.output)
-
-asyncio.run(main())
-```
+Smooth is **state-of-the-art on reliability, speed, and cost**, check out our performance summary: https://docs.smooth.sh/performance
 
 ---
 
