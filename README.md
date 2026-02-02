@@ -2,7 +2,7 @@
 
 ![Comparison](https://www.smooth.sh/images/comparison.gif)
 
-**TL;DR:** Smooth is an AI browser automation framework that can act and extract information from the web. It's powered by our browser agent which controls the browser with mouse and keyboard to carry out tasks autonomously on the web.
+**TL;DR:** Smooth is an AI browser automation SDK and CLI that can act and extract information from the web. It's powered by our browser agent which controls the browser with mouse and keyboard to carry out tasks autonomously on the web.
 
 [Discord](https://discord.com/invite/VcdgMwUmMG) · [Documentation](https://docs.smooth.sh) · [Get API Key](https://app.smooth.sh)
 
