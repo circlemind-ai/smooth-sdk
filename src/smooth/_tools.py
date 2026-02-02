@@ -1,13 +1,11 @@
 # pyright: reportPrivateUsage=false
 import asyncio
 import inspect
-from typing import TYPE_CHECKING, Any, Callable, Coroutine
+from typing import Any, Callable, Coroutine
 
 from ._exceptions import ToolCallError
+from ._interface import AsyncTaskHandle, AsyncTaskHandleEx, TaskHandle, TaskHandleEx
 from .models import TaskEvent, ToolSignature
-
-if TYPE_CHECKING:
-  from ._interface import AsyncTaskHandle, TaskHandle
 
 
 class AsyncSmoothTool:
@@ -36,7 +34,7 @@ class AsyncSmoothTool:
     else:
       return await self._fn(**kwargs)
 
-  async def _handle_tool_response(self, task: "AsyncTaskHandle", event_id: str, response: Any) -> Any:
+  async def _handle_tool_response(self, task: "AsyncTaskHandleEx", event_id: str, response: Any) -> Any:
     if isinstance(response, ToolCallError):
       await task._send_event(
         TaskEvent(
@@ -74,6 +72,9 @@ class AsyncSmoothTool:
       )
 
   async def __call__(self, task: "AsyncTaskHandle", event_id: str, **kwargs: Any) -> Any:
+    if not isinstance(task, AsyncTaskHandleEx):
+      task = AsyncTaskHandleEx(task)
+
     try:
       response = await self._run_fn(task, **kwargs)
       await self._handle_tool_response(task, event_id, response)
@@ -101,6 +102,9 @@ class SmoothTool(AsyncSmoothTool):
       return await asyncio.to_thread(self._fn, **kwargs)
 
   async def __call__(self, task: "TaskHandle", event_id: str, **kwargs: Any) -> Any:
+    if not isinstance(task, TaskHandleEx):
+      task = TaskHandleEx(task)
+
     try:
       response = await self._run_fn(task, **kwargs)
       await self._handle_tool_response(task._async_handle, event_id, response)

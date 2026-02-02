@@ -174,11 +174,7 @@ class AsyncTaskHandle(BaseTaskHandle):
 
   # --- Proxy Methods ---
 
-  def _start_proxy(
-    self,
-    server_url: str,
-    token: str
-  ) -> None:
+  def _start_proxy(self, server_url: str, token: str) -> None:
     """Start a proxy tunnel for this task/session.
 
     Args:
@@ -210,62 +206,7 @@ class AsyncTaskHandle(BaseTaskHandle):
     """Check if a proxy is currently running for this handle."""
     return self._proxy is not None and self._proxy.is_running
 
-  # --- Action Methods ---
-
-  async def goto(self, url: str):
-    """Navigates to the given URL."""
-    event = TaskEvent(
-      name="browser_action",
-      payload={
-        "name": "goto",
-        "input": {"url": url},
-      },
-    )
-    return ActionGotoResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
-
-  async def extract(self, schema: dict[str, Any], prompt: str | None = None):
-    """Extracts from the given URL."""
-    event = TaskEvent(
-      name="browser_action",
-      payload={
-        "name": "extract",
-        "input": {
-          "schema": schema,
-          "prompt": prompt,
-        },
-      },
-    )
-    return ActionExtractResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
-
-  async def evaluate_js(self, code: str, args: dict[str, Any] | None = None):
-    """Executes JavaScript code in the browser context."""
-    event = TaskEvent(
-      name="browser_action",
-      payload={
-        "name": "evaluate_js",
-        "input": {
-          "js": code,
-          "args": args,
-        },
-      },
-    )
-    return ActionEvaluateJSResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
-
   # --- Private Methods ---
-
-  async def _send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
-    """Sends an event to a running task."""
-    event.id = event.id or generate()
-    if has_result:
-      future = asyncio.get_running_loop().create_future()
-      self._event_futures[event.id] = future
-
-      await self._client._send_task_event(self._id, event)
-      async with self._connection():
-        return await future
-    else:
-      await self._client._send_task_event(self._id, event)
-      return None
 
   async def _connect(self):
     # We use a counter to keep track of how many clients requested a connection
@@ -367,6 +308,79 @@ class AsyncTaskHandle(BaseTaskHandle):
     """Updates a running task with user input."""
     return await self._client._update_task(self._id, payload)
 
+
+if TYPE_CHECKING:
+  _BaseAsyncTaskHandleEx = AsyncTaskHandle
+else:
+  _BaseAsyncTaskHandleEx = object
+
+
+class AsyncTaskHandleEx(_BaseAsyncTaskHandleEx):
+  def __init__(self, handle: AsyncTaskHandle):
+    self._handle = handle
+
+  def __getattr__(self, name: str):
+    return getattr(self._handle, name)
+
+  # --- Action Methods ---
+
+  async def goto(self, url: str):
+    """Navigates to the given URL."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "goto",
+        "input": {"url": url},
+      },
+    )
+    return ActionGotoResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
+
+  async def extract(self, schema: dict[str, Any], prompt: str | None = None):
+    """Extracts from the given URL."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "extract",
+        "input": {
+          "schema": schema,
+          "prompt": prompt,
+        },
+      },
+    )
+    return ActionExtractResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
+
+  async def evaluate_js(self, code: str, args: dict[str, Any] | None = None):
+    """Executes JavaScript code in the browser context."""
+    event = TaskEvent(
+      name="browser_action",
+      payload={
+        "name": "evaluate_js",
+        "input": {
+          "js": code,
+          "args": args,
+        },
+      },
+    )
+    return ActionEvaluateJSResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
+
+  # --- Private Methods ---
+
+  async def _send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
+    """Sends an event to a running task."""
+    event.id = event.id or generate()
+    if has_result:
+      future = asyncio.get_running_loop().create_future()
+      self._event_futures[event.id] = future
+
+      await self._client._send_task_event(self._id, event)
+      async with self._connection():
+        return await future
+    else:
+      await self._client._send_task_event(self._id, event)
+      return None
+
+  # --- Deprecated Methods ---
+
   @deprecated("exec_js is deprecated, use evaluate_js instead")
   async def exec_js(self, code: str, args: dict[str, Any] | None = None) -> asyncio.Future[Any]:
     """Executes JavaScript code in the browser context."""
@@ -389,8 +403,12 @@ class AsyncTaskHandle(BaseTaskHandle):
     return future
 
 
-class AsyncSessionHandle(AsyncTaskHandle):
+class AsyncSessionHandle(AsyncTaskHandleEx):
   """A handle to an open browser session."""
+
+  def __init__(self, task_id: str, client: "SmoothAsyncClient", tools: Sequence["AsyncSmoothTool"] | None = None):
+    """Initializes the task handle."""
+    super().__init__(AsyncTaskHandle(task_id, client, tools))
 
   async def __aenter__(self):
     """Enters the context manager."""
@@ -450,13 +468,19 @@ class AsyncSessionHandle(AsyncTaskHandle):
 class TaskHandle(BaseTaskHandle):
   """A synchronous handle to a running task (wraps AsyncTaskHandle)."""
 
-  def __init__(self, task_id: str, client: "SmoothClient", tools: list["SmoothTool"] | None = None):
+  def __init__(
+    self,
+    task_id: str,
+    client: "SmoothClient",
+    tools: Sequence["SmoothTool"] | None = None,
+    task_handle: AsyncTaskHandle | None = None,
+  ):
     """Initializes the task handle."""
     super().__init__(task_id)
     self._client = client
     self._loop = client._loop  # Use client's event loop
 
-    self._async_handle = AsyncTaskHandle(task_id, client._async_client, tools, self)
+    self._async_handle = task_handle or AsyncTaskHandle(task_id, client._async_client, tools, self)
 
   def _run_async(self, coro: Coroutine[Any, Any, T]) -> T:
     return self._client._run_async(coro)
@@ -485,6 +509,30 @@ class TaskHandle(BaseTaskHandle):
   def _start_proxy(self, server_url: str, token: str) -> None:
     return self._async_handle._start_proxy(server_url, token)
 
+  # --- Deprecated Methods ---
+
+  @deprecated("update is deprecated, use send_event instead")
+  def update(self, payload: TaskUpdateRequest) -> bool:
+    """Updates a running task with user input."""
+    return self._run_async(self._async_handle.update(payload))
+
+
+if TYPE_CHECKING:
+  _BaseTaskHandleEx = TaskHandle
+else:
+  _BaseTaskHandleEx = object
+
+
+class TaskHandleEx(_BaseTaskHandleEx):
+  def __init__(self, handle: TaskHandle):
+    self._handle = handle
+    self._async_handle = AsyncTaskHandleEx(handle._async_handle)
+
+  def __getattr__(self, name: str):
+    return getattr(self._handle, name)
+
+  # --- Action Methods ---
+
   def goto(self, url: str) -> Any:
     """Navigates to the given URL."""
     return self._run_async(self._async_handle.goto(url))
@@ -499,11 +547,6 @@ class TaskHandle(BaseTaskHandle):
 
   # --- Deprecated Methods ---
 
-  @deprecated("update is deprecated, use send_event instead")
-  def update(self, payload: TaskUpdateRequest) -> bool:
-    """Updates a running task with user input."""
-    return self._run_async(self._async_handle.update(payload))
-
   @deprecated("exec_js is deprecated, use evaluate_js instead")
   def exec_js(self, code: str, args: dict[str, Any] | None = None) -> Any:
     """Executes JavaScript code in the browser context."""
@@ -515,14 +558,12 @@ class TaskHandle(BaseTaskHandle):
     return self._run_async(_run())
 
 
-class SessionHandle(TaskHandle):
+class SessionHandle(TaskHandleEx):
   """A handle to an open browser session."""
 
-  def __init__(self, task_id: str, client: "SmoothClient", tools: list["SmoothTool"] | None = None):
+  def __init__(self, task_id: str, client: "SmoothClient", tools: Sequence["SmoothTool"] | None = None):
     """Initializes the task handle."""
-    super().__init__(task_id, client, tools)
-
-    self._async_handle = AsyncSessionHandle(task_id, client._async_client, tools)
+    super().__init__(TaskHandle(task_id, client, tools))
 
   def __enter__(self):
     """Enters the context manager."""
