@@ -563,7 +563,8 @@ class SessionHandle(TaskHandleEx):
 
   def __init__(self, task_id: str, client: "SmoothClient", tools: Sequence["SmoothTool"] | None = None):
     """Initializes the task handle."""
-    super().__init__(TaskHandle(task_id, client, tools))
+    self._handle = TaskHandle(task_id, client, tools)
+    self._async_handle = AsyncSessionHandle(task_id, client._async_client, tools)
 
   def __enter__(self):
     """Enters the context manager."""
