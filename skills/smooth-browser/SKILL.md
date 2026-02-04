@@ -98,6 +98,8 @@ Bad tasks:
 - "Load google.com, write 'restaurants near me', click search, wait for the page to load, extract the top 5 results, and return them." -> too prescriptive! you can say "search restaurants near me on google and return the top 5 results"
 - "Find software engineers that would be a good fit for our company" -> too broad! YOU need to plan how to achieve the goal and run well-defined tasks that compose into the given goal
 
+IMPORTANT: Smooth is powered by an intelligent agent, DO NOT over-controll it, and give it well-defined goal-oriented tasks instead of steps.
+
 ### 4. Close the Session
 
 You must close the session when you're done.
@@ -382,7 +384,9 @@ smooth delete-file <file-id>
 6. **Use structured output for data extraction** - Provides clean, typed results
 7. **Run sequential tasks in the same session** - Keep the session continuous when steps rely on previous work.
 8. **Use subagents with one session each for independent tasks** - Run tasks in parallel to speed up work.
-9. **Do not guess url query parameters** - Let the agent apply filters via the UI to avoid landing on invalid 
+9. **Coordinate resources** - When working with subagents, you must create and assign ONE section to each subagent without having them creating them.
+10. **Do not guess url query parameters** - Let the agent apply filters via the UI to avoid landing on invalid
+11. **Smooth is powered by an intelligent agent** - Give it tasks, not individual steps.
 
 ---
 
