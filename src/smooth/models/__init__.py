@@ -265,6 +265,10 @@ class ActionGotoResponse(BaseActionResponse):
 
   pass
 
+class ActionCloseResponse(BaseActionResponse):
+  """Response model for close action."""
+
+  output: bool = Field(description="Indicates if the browser session was closed successfully.")
 
 class ActionExtractResponse(BaseActionResponse):
   """Response model for extract action."""

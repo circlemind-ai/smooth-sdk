@@ -12,6 +12,7 @@ from ._exceptions import ApiError, BadRequestError, ToolCallError
 from ._proxy import FRPProxy, ProxyConfig
 from ._utils import encode_url, logger
 from .models import (
+  ActionCloseResponse,
   ActionEvaluateJSResponse,
   ActionExtractResponse,
   ActionGotoResponse,
@@ -286,11 +287,15 @@ class AsyncTaskHandle(BaseTaskHandle):
     await asyncio.sleep(random.uniform(0, self._poll_interval))  # Stagger pollers
     self._polling_task = asyncio.create_task(_poller())
 
-  def _disconnect(self):
+  def _disconnect(self, force: bool = False):
     """Disconnects the task handle from the task."""
     self._is_alive = 0 if self._is_alive < 1 else self._is_alive - 1
     if self._is_alive == 0 and self._polling_task and not self._polling_task.done():
       self._polling_task.cancel()
+
+    # Useful to terminate any polling and avoid dangling requests
+    if force is True and self._task_response:
+      self._task_response.status = "cancelled"
 
   @asynccontextmanager
   async def _connection(self):
@@ -418,9 +423,9 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
   async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
     """Exits the context manager."""
     if exc_type is None:
-      await self.close(force=False)
+      asyncio.create_task(self.close(force=False))
     else:
-      await self.close(force=True)
+      asyncio.create_task(self.close(force=True))
 
   # --- Session Methods ---
 
@@ -435,10 +440,13 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
           "name": "close",
         },
       )
-      await self._send_event(event, has_result=False)
+      r = ActionCloseResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
     else:
       await self._client._delete_task(self._id)
-    self._disconnect()
+      r = ActionCloseResponse(output=True, credits_used=0, duration=0)
+    self._disconnect(force)
+
+    return r.output
 
   async def run_task(
     self,

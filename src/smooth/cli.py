@@ -170,8 +170,7 @@ async def list_profiles(args: argparse.Namespace):
       profiles = await client.list_profiles()
       if args.json:
         print_success(
-          f"Found {len(profiles)} profile(s)",
-          {"profiles": [{"id": p.id} for p in profiles], "count": len(profiles)}
+          f"Found {len(profiles)} profile(s)", {"profiles": [{"id": p.id} for p in profiles], "count": len(profiles)}
         )
       else:
         if not profiles:
@@ -365,33 +364,33 @@ async def close_session(args: argparse.Namespace):
   try:
     async with SmoothAsyncClient() as client:
       session_handle = AsyncSessionHandle(args.session_id, client)
-      await session_handle.close(force=args.force)
+      if not await session_handle.close(force=args.force):
+        api_error = "Failed to close session: Smooth is running, set force=True to force close."
   except ApiError as e:
     api_error = f"Failed to close session: {e.detail}"
   except Exception as e:
     api_error = f"Unexpected error: {str(e)}"
 
-  # Always remove from sessions.json (even if API call failed, local cleanup should happen)
-  try:
-    remove_session(args.session_id)
-  except Exception as e:
-    if not args.json:
-      print(f"Warning: Failed to remove session from local tracking: {e}")
-
   # Report result
   if api_error:
     print_error(api_error, json_mode=args.json)
+
+    return
   elif args.json:
-    print_success(
-      f"Session '{args.session_id}' closed successfully",
-      {"session_id": args.session_id, "force": args.force}
-    )
+    print_success(f"Session '{args.session_id}' closed successfully", {"session_id": args.session_id, "force": args.force})
   else:
     print(f"Session '{args.session_id}' closed successfully!")
     if args.force:
       print("Note: Session forcefully terminated. Wait 5 seconds for the profile to save cookies and state.")
     else:
       print("Note: Graceful close initiated. Wait 5 seconds for the profile to save cookies and state.")
+
+  # Remove from sessions.json (even if API call failed, local cleanup should happen)
+  try:
+    remove_session(args.session_id)
+  except Exception as e:
+    if not args.json:
+      print(f"Warning: Failed to remove session from local tracking: {e}")
 
 
 async def run_task(args: argparse.Namespace):
@@ -457,10 +456,7 @@ async def live_view(args: argparse.Namespace):
       live_url = await session_handle.live_url(interactive=True, timeout=30)
 
       if args.json:
-        print_success(
-          "Live view URL retrieved",
-          {"session_id": args.session_id, "live_url": live_url}
-        )
+        print_success("Live view URL retrieved", {"session_id": args.session_id, "live_url": live_url})
       else:
         print(f"Live view URL for session '{args.session_id}':")
         print(live_url)
@@ -480,10 +476,7 @@ async def download_files(args: argparse.Namespace):
       downloads_url = await task_handle.downloads_url(timeout=30)
 
       if args.json:
-        print_success(
-          "Downloads URL retrieved",
-          {"session_id": args.session_id, "downloads_url": downloads_url}
-        )
+        print_success("Downloads URL retrieved", {"session_id": args.session_id, "downloads_url": downloads_url})
       else:
         print(f"Downloads URL for session '{args.session_id}':")
         print(downloads_url)
@@ -556,7 +549,7 @@ async def extract(args: argparse.Namespace):
         else:
           print("\nExtracted data:")
           print(result.output)
-      except Exception as e:
+      except Exception:
         # Clear task on error
         update_session_task(args.session_id, None)
         raise
