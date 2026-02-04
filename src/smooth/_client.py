@@ -168,7 +168,7 @@ class SmoothClient(BaseClient):
     url: str | None = None,
     files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
-    device: DeviceType = "mobile",
+    device: DeviceType = "desktop",
     allowed_urls: list[str] | None = None,
     enable_recording: bool = True,
     profile_id: str | None = None,
@@ -236,7 +236,7 @@ class SmoothClient(BaseClient):
     files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
-    device: DeviceType = "mobile",
+    device: DeviceType = "desktop",
     allowed_urls: list[str] | None = None,
     enable_recording: bool = True,
     session_id: str | None = None,
@@ -267,7 +267,7 @@ class SmoothClient(BaseClient):
         files: A list of file ids to pass to the agent.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
-        device: Device type for the task. Default is mobile.
+        device: Device type for the task. Default is desktop.
         allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://*example.com/*).
           If None, all URLs are allowed.
         enable_recording: Enable video recording of the task execution.
@@ -625,7 +625,7 @@ class SmoothAsyncClient(BaseClient):
     url: str | None = None,
     files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
-    device: DeviceType = "mobile",
+    device: DeviceType = "desktop",
     allowed_urls: list[str] | None = None,
     enable_recording: bool = True,
     profile_id: str | None = None,
@@ -692,7 +692,7 @@ class SmoothAsyncClient(BaseClient):
     files: list[str] | None = None,
     agent: Literal["smooth"] = "smooth",
     max_steps: int = 32,
-    device: DeviceType = "mobile",
+    device: DeviceType = "desktop",
     allowed_urls: list[str] | None = None,
     enable_recording: bool = True,
     session_id: str | None = None,
@@ -723,7 +723,7 @@ class SmoothAsyncClient(BaseClient):
         files: A list of file ids to pass to the agent.
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
-        device: Device type for the task. Default is mobile.
+        device: Device type for the task. Default is desktop.
         allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://*example.com/*).
           If None, all URLs are allowed.
         enable_recording: Enable video recording of the task execution.
