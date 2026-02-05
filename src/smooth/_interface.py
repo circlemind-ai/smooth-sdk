@@ -438,7 +438,11 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
           "name": "close",
         },
       )
-      r = ActionCloseResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
+      try:
+        r = ActionCloseResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
+      except RuntimeError:
+        # A runtime error means that the session was successfully closed and polling stopped
+        r = ActionCloseResponse(output=True, credits_used=0, duration=0)
     else:
       await self._client._delete_task(self._id)
       r = ActionCloseResponse(output=True, credits_used=0, duration=0)
