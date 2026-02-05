@@ -277,6 +277,9 @@ async def start_session(args: argparse.Namespace):
       proxy_username=proxy_username,
       proxy_password=proxy_password,
       show_cursor=True,  # Show mouse cursor by default
+      additional_tools={
+        "screenshot": {"full_page": False}
+      }
     )
 
     session_id = task_handle.id()
