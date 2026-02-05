@@ -70,7 +70,7 @@ smooth run <session-id> "Go to the LocalLLM subreddit and find the top 3 posts"
 ```bash
 smooth run <session-id> "Search for 'wireless headphones', filter by 4+ stars, sort by price, and extract the top 3 results" \
   --url "https://shop.example.com" \
-  --response-model '{"type":"object","properties":{"products":{"type":"array","items":{"type":"object","properties":{"name":{"type":"string"},"price":{"type":"number"},"rating":{"type":"number"}}}}}}'
+  --response-model '{"type":"array","items":{"type":"object","properties":{"product":{"type":"string","description":"Thenameoftheproductbeingdescribed."},"sentiment":{"type":"string","enum":["positive","negative","neutral"],"description":"The overall sentiment about the product."}},"required":["product","sentiment"]}}'
 ```
 
 **With metadata (the agent will be):**
