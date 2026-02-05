@@ -431,8 +431,6 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
 
   async def close(self, force: bool = True):
     """Closes the session."""
-    # Stop proxy if running
-    self._stop_proxy()
     if not force:
       event = TaskEvent(
         name="session_action",
@@ -444,7 +442,11 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
     else:
       await self._client._delete_task(self._id)
       r = ActionCloseResponse(output=True, credits_used=0, duration=0)
-    self._disconnect(force)
+    if r.output:
+      # Stop polling
+      self._disconnect(force)
+      # Stop proxy if running
+      self._stop_proxy()
 
     return r.output
 
