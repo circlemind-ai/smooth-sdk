@@ -69,19 +69,19 @@ smooth start-session --profile-id "my-profile" --url "https://example.com"
 Execute tasks using natural language:
 
 ```bash
-smooth run -- <session-id> "Go to the LocalLLM subreddit and find the top 3 posts"
+smooth run <session-id> "Go to the LocalLLM subreddit and find the top 3 posts"
 ```
 
 **With structured output (for tasks requiring interaction):**
 ```bash
-smooth run -- <session-id> "Search for 'wireless headphones', filter by 4+ stars, sort by price, and extract the top 3 results" \
+smooth run <session-id> "Search for 'wireless headphones', filter by 4+ stars, sort by price, and extract the top 3 results" \
   --url "https://shop.example.com" \
   --response-model '{"type":"array","items":{"type":"object","properties":{"product":{"type":"string","description":"Thenameoftheproductbeingdescribed."},"sentiment":{"type":"string","enum":["positive","negative","neutral"],"description":"The overall sentiment about the product."}},"required":["product","sentiment"]}}'
 ```
 
 **With metadata (the agent will be):**
 ```bash
-smooth run -- <session-id> "Fill out the form with user information" \
+smooth run <session-id> "Fill out the form with user information" \
   --metadata '{"email":"user@example.com","name":"John Doe"}'
 ```
 
@@ -111,7 +111,7 @@ IMPORTANT: Smooth is powered by an intelligent agent, DO NOT over-controll it, a
 You must close the session when you're done.
 
 ```bash
-smooth close-session -- <session-id>
+smooth close-session <session-id>
 ```
 
 **Important:** Wait 5 seconds after closing to ensure cookies and state are saved to the profile if you need it for another session.
@@ -131,11 +131,11 @@ smooth create-profile --profile-id "github-account"
 smooth start-session --profile-id "github-account" --url "https://github.com/login"
 
 # Get live view to authenticate manually
-smooth live-view -- <session-id>
+smooth live-view <session-id>
 # Give the URL to the user so it can open it in the browser and log in
 
 # When the user confirms the login you can then close the session to save the profile data
-smooth close-session -- <session-id>
+smooth close-session <session-id>
 # Save the profile-id somewhere to later reuse it
 ```
 
@@ -143,7 +143,7 @@ smooth close-session -- <session-id>
 ```bash
 # Next time, just start a session with the same profile
 smooth start-session --profile-id "github-account"
-smooth run -- <session-id> "Create a new issue in my repo 'my-project'"
+smooth run <session-id> "Create a new issue in my repo 'my-project'"
 ```
 
 **Keep profiles organized:** Save to memory which profiles authenticate to which services so you can reuse them efficiently in the future.
@@ -195,7 +195,7 @@ smooth run $SESSION_ID "Consider the product with name '$RESULT'. Now find 3 sim
 
 ```bash
 smooth start-session --url "https://news.ycombinator.com"
-smooth run -- <session-id> "Extract the top 10 posts" \
+smooth run <session-id> "Extract the top 10 posts" \
   --response-model '{
     "type": "object",
     "properties": {
@@ -222,7 +222,7 @@ It's like a smart fetch that can extract structured data from dynamically render
 
 ```bash
 smooth start-session
-smooth extract -- <session-id> \
+smooth extract <session-id> \
   --url "https://news.ycombinator.com" \
   --schema '{
     "type": "object",
@@ -263,7 +263,7 @@ FILE_ID=$(smooth upload-file /path/to/document.pdf --purpose "Contract to analyz
 smooth start-session --files "$FILE_ID" --url "https://example.com"
 
 # Step 3: The agent can now access the file in tasks
-smooth run -- <session-id> "Analyze the contract document and extract key terms"
+smooth run <session-id> "Analyze the contract document and extract key terms"
 ```
 
 **Upload multiple files:**
@@ -278,11 +278,11 @@ smooth start-session --files "$FILE_ID_1,$FILE_ID_2"
 
 **Download files from session:**
 ```bash
-smooth run -- <session-id> "Download the monthly report PDF" --url
-smooth close-session -- <session-id>
+smooth run <session-id> "Download the monthly report PDF" --url
+smooth close-session <session-id>
 
 # After session closes, get download URL
-smooth downloads -- <session-id>
+smooth downloads <session-id>
 # Visit the URL to download files
 ```
 
@@ -294,14 +294,14 @@ When automation needs human input (CAPTCHA, 2FA, complex authentication):
 
 ```bash
 smooth start-session --profile-id "my-profile"
-smooth run -- <session-id> "Go to secure-site.com and log in"
+smooth run <session-id> "Go to secure-site.com and log in"
 
 # If task encounters CAPTCHA or requires manual action:
-smooth live-view -- <session-id>
+smooth live-view <session-id>
 # Open the URL and complete the manual steps
 
 # Continue automation after manual intervention:
-smooth run -- <session-id> "Now navigate to the dashboard and export data"
+smooth run <session-id> "Now navigate to the dashboard and export data"
 ```
 
 ---
@@ -312,7 +312,7 @@ smooth run -- <session-id> "Now navigate to the dashboard and export data"
 
 ```bash
 smooth start-session --url "https://example.com/products"
-smooth extract -- <session-id> \
+smooth extract <session-id> \
   --schema '{"type":"object","properties":{"products":{"type":"array"}}}' \
   --prompt "Extract all product names and prices"
 ```
@@ -320,7 +320,7 @@ smooth extract -- <session-id> \
 **Navigate to URL then extract:**
 
 ```bash
-smooth extract -- <session-id> \
+smooth extract <session-id> \
   --url "https://example.com/products" \
   --schema '{"type":"object","properties":{"products":{"type":"array"}}}'
 ```
@@ -329,13 +329,13 @@ smooth extract -- <session-id> \
 
 ```bash
 # Simple JavaScript
-smooth evaluate-js -- <session-id> "document.title"
+smooth evaluate-js <session-id> "document.title"
 
 # With arguments
-smooth evaluate-js -- <session-id> "(args) => {return args.x + args.y;}" --args '{"x": 5, "y": 10}'
+smooth evaluate-js <session-id> "(args) => {return args.x + args.y;}" --args '{"x": 5, "y": 10}'
 
 # Complex DOM manipulation
-smooth evaluate-js -- <session-id> \
+smooth evaluate-js <session-id> \
   "document.querySelectorAll('a').length"
 ```
 
@@ -402,9 +402,13 @@ smooth delete-file <file-id>
 
 **"Profile not found"** - Check `smooth list-profiles` to see available profiles.
 
-**CAPTCHA or authentication issues** - Use `smooth live-view -- <session-id>` to let the user manually intervene.
+**CAPTCHA or authentication issues** - Use `smooth live-view <session-id>` to let the user manually intervene.
 
 **Task timeout** - Increase `--max-steps` or break the task into smaller steps.
+
+### Known issues
+
+**Dealing with session ids starting with a `-` (dash) sign** - Session ids might start with a dash sign. In those situations, deal with them using the -- (double-dash) separator
 
 ---
 
@@ -421,12 +425,12 @@ smooth delete-file <file-id>
 
 ### Session Commands
 - `smooth start-session [OPTIONS]` - Start a browser session
-- `smooth close-session -- <session-id> [--force]` - Close a session
-- `smooth run -- <session-id> "<task>" [OPTIONS]` - Run a task
-- `smooth extract -- <session-id> --schema SCHEMA [OPTIONS]` - Extract structured data
-- `smooth evaluate-js -- <session-id> "code" [--args JSON]` - Execute JavaScript
-- `smooth live-view -- <session-id>` - Get interactive live URL
-- `smooth recording-url -- <session-id>` - Get recording URL
-- `smooth downloads -- <session-id>` - Get downloads URL
+- `smooth close-session <session-id> [--force]` - Close a session
+- `smooth run <session-id> "<task>" [OPTIONS]` - Run a task
+- `smooth extract <session-id> --schema SCHEMA [OPTIONS]` - Extract structured data
+- `smooth evaluate-js <session-id> "code" [--args JSON]` - Execute JavaScript
+- `smooth live-view <session-id>` - Get interactive live URL
+- `smooth recording-url <session-id>` - Get recording URL
+- `smooth downloads <session-id>` - Get downloads URL
 
 All commands support `--json` flag for JSON output.
