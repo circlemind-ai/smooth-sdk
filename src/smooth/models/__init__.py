@@ -122,6 +122,10 @@ class TaskRequest(BaseModel):
     default=True,
     description="Enable adblock for the browser session. Default is True.",
   )
+  use_captcha_solver: bool | None = Field(
+    default=True,
+    description="Enable captcha solver for the browser session. Default is True.",
+  )
   additional_tools: dict[str, dict[str, Any] | None] | None = Field(
     default=None, description="Additional tools to enable for the task."
   )

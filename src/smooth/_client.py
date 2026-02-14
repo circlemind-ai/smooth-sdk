@@ -179,6 +179,7 @@ class SmoothClient(BaseClient):
     proxy_password: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
+    use_captcha_solver: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
     custom_tools: Sequence[SmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
@@ -207,6 +208,7 @@ class SmoothClient(BaseClient):
       proxy_password=proxy_password,
       certificates=certificates,
       use_adblock=use_adblock,
+      use_captcha_solver=use_captcha_solver,
       additional_tools=additional_tools,
       custom_tools=custom_tools,
       experimental_features=experimental_features,
@@ -248,6 +250,7 @@ class SmoothClient(BaseClient):
     proxy_password: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
+    use_captcha_solver: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
     custom_tools: Sequence[SmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
@@ -283,6 +286,7 @@ class SmoothClient(BaseClient):
           - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
           - `password` (optional): Password to decrypt the certificate file, if password-protected.
         use_adblock: Enable adblock for the browser session. Default is True.
+        use_captcha_solver: Enable captcha solver for the browser session. Default is True.
         additional_tools: Additional tools to enable for the task.
         custom_tools: Custom tools to register for the task. Use the @client.tool decorator or SmoothTool class.
         experimental_features: Experimental features to enable for the task.
@@ -319,6 +323,7 @@ class SmoothClient(BaseClient):
         proxy_password=proxy_password,
         certificates=certificates,
         use_adblock=use_adblock,
+        use_captcha_solver=use_captcha_solver,
         additional_tools=additional_tools,
         custom_tools=custom_tools_,
         experimental_features=experimental_features,
@@ -636,6 +641,7 @@ class SmoothAsyncClient(BaseClient):
     proxy_password: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
+    use_captcha_solver: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
     custom_tools: Sequence[AsyncSmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
@@ -664,6 +670,7 @@ class SmoothAsyncClient(BaseClient):
       proxy_password=proxy_password,
       certificates=certificates,
       use_adblock=use_adblock,
+      use_captcha_solver=use_captcha_solver,
       additional_tools=additional_tools,
       custom_tools=custom_tools,
       experimental_features=experimental_features,
@@ -704,6 +711,7 @@ class SmoothAsyncClient(BaseClient):
     proxy_password: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
+    use_captcha_solver: bool | None = True,
     additional_tools: dict[str, dict[str, Any] | None] | None = None,
     custom_tools: Sequence[AsyncSmoothTool | dict[str, Any]] | None = None,
     experimental_features: dict[str, Any] | None = None,
@@ -739,6 +747,7 @@ class SmoothAsyncClient(BaseClient):
           - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
           - `password` (optional): Password to decrypt the certificate file.
         use_adblock: Enable adblock for the browser session. Default is True.
+        use_captcha_solver: Enable captcha solver for the browser session. Default is True.
         additional_tools: Additional tools to enable for the task.
         custom_tools: Custom tools to register for the task.
         experimental_features: Experimental features to enable for the task.
@@ -777,6 +786,7 @@ class SmoothAsyncClient(BaseClient):
       proxy_password=proxy_password,
       certificates=certificates_,
       use_adblock=use_adblock,
+      use_captcha_solver=use_captcha_solver,
       additional_tools=additional_tools,
       custom_tools=[tool.signature for tool in custom_tools_] if custom_tools_ else None,
       experimental_features=experimental_features,
