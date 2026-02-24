@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from ._exceptions import ApiError, BadRequestError, ToolCallError
 from ._proxy import FRPProxy, ProxyConfig
+from ._telemetry import Telemetry, track
 from ._utils import encode_url, logger
 from .models import (
   ActionCloseResponse,
@@ -102,8 +103,11 @@ class AsyncTaskHandle(BaseTaskHandle):
         await asyncio.sleep(0.2)
       raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
 
-  async def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None):
+  async def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
     """Returns the live URL for the task."""
+    if self._task_response and self._task_response.status not in ["waiting", "running"]:
+      raise BadRequestError(f"Live URL not available for task {self.id()} as it is {self._task_response.status}.")
+
     if self._task_response and self._task_response.live_url:
       return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
 
@@ -112,10 +116,10 @@ class AsyncTaskHandle(BaseTaskHandle):
       start_time = loop.time()
       while timeout is None or (loop.time() - start_time) < timeout:
         if self._task_response:
+          if self._task_response.status not in ["waiting", "running"]:
+            raise BadRequestError(f"Live URL not available for task {self.id()} as it is {self._task_response.status}.")
           if self._task_response.live_url:
             return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
-          elif self._task_response.status not in ["waiting", "running"]:
-            raise BadRequestError(f"Live URL not available for task {self.id()} as it is not running.")
         await asyncio.sleep(0.2)
 
     raise TimeoutError(f"Live URL not available for task {self.id()}.")
@@ -282,10 +286,12 @@ class AsyncTaskHandle(BaseTaskHandle):
           if not task.done():
             task.cancel()
         self._tool_tasks.clear()
+        logger.error("Poller %s for task %s failed: %s", poller_id, self.id(), e)
       logger.debug("Poller %s for task %s stopped", poller_id, self.id())
 
     await asyncio.sleep(random.uniform(0, self._poll_interval))  # Stagger pollers
     self._polling_task = asyncio.create_task(_poller())
+    self._polling_task.add_done_callback(lambda t: t.exception() if not t.cancelled() else None)
 
   def _disconnect(self, force: bool = False):
     """Disconnects the task handle from the task."""
@@ -329,6 +335,7 @@ class AsyncTaskHandleEx(_BaseAsyncTaskHandleEx):
 
   # --- Action Methods ---
 
+  @track("session.goto", properties_fn=lambda a, kw: {"url": kw.get("url") or (a[1] if len(a) > 1 else None)})
   async def goto(self, url: str):
     """Navigates to the given URL."""
     event = TaskEvent(
@@ -340,6 +347,7 @@ class AsyncTaskHandleEx(_BaseAsyncTaskHandleEx):
     )
     return ActionGotoResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
 
+  @track("session.extract", properties_fn=lambda a, kw: {"prompt": kw.get("prompt") or (a[2] if len(a) > 2 else None)})
   async def extract(self, schema: dict[str, Any], prompt: str | None = None):
     """Extracts from the given URL."""
     event = TaskEvent(
@@ -354,6 +362,13 @@ class AsyncTaskHandleEx(_BaseAsyncTaskHandleEx):
     )
     return ActionExtractResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
 
+  @track(
+    "session.evaluate_js",
+    properties_fn=lambda a, kw: {
+      "code": kw.get("code") or (a[1] if len(a) > 1 else None),
+      "has_args": (kw.get("args") or (a[2] if len(a) > 2 else None)) is not None,
+    },
+  )
   async def evaluate_js(self, code: str, args: dict[str, Any] | None = None):
     """Executes JavaScript code in the browser context."""
     event = TaskEvent(
@@ -414,6 +429,7 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
   def __init__(self, task_id: str, client: "SmoothAsyncClient", tools: Sequence["AsyncSmoothTool"] | None = None):
     """Initializes the task handle."""
     super().__init__(AsyncTaskHandle(task_id, client, tools))
+    self._closed = False
 
   async def __aenter__(self):
     """Enters the context manager."""
@@ -422,38 +438,59 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
 
   async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
     """Exits the context manager."""
-    if exc_type is None:
-      asyncio.create_task(self.close(force=False))
-    else:
-      asyncio.create_task(self.close(force=True))
+    asyncio.create_task(self.close(force=True))
 
   # --- Session Methods ---
 
   async def close(self, force: bool = True):
     """Closes the session."""
-    if not force:
-      event = TaskEvent(
-        name="session_action",
-        payload={
-          "name": "close",
-        },
-      )
-      try:
-        r = ActionCloseResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
-      except RuntimeError:
-        # A runtime error means that the session was successfully closed and polling stopped
+    import time as _time
+
+    start = _time.monotonic()
+    self._closed = True
+    try:
+      if not force:
+        event = TaskEvent(
+          name="session_action",
+          payload={
+            "name": "close",
+          },
+        )
+        try:
+          r = ActionCloseResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
+        except RuntimeError:
+          # A runtime error means that the session was successfully closed and polling stopped
+          r = ActionCloseResponse(output=True, credits_used=0, duration=0)
+      else:
+        await self._client._delete_task(self._id)
         r = ActionCloseResponse(output=True, credits_used=0, duration=0)
-    else:
-      await self._client._delete_task(self._id)
-      r = ActionCloseResponse(output=True, credits_used=0, duration=0)
-    if r.output:
-      # Stop polling
-      self._disconnect(force)
-      # Stop proxy if running
-      self._stop_proxy()
+      if r.output:
+        # Stop polling
+        self._disconnect(force)
+        # Stop proxy if running
+        self._stop_proxy()
 
-    return r.output
+      Telemetry.get().record("session.close", properties={"force": force}, duration_ms=(_time.monotonic() - start) * 1000)
+      return r.output
+    except Exception as e:
+      Telemetry.get().record(
+        "session.close",
+        properties={"force": force},
+        duration_ms=(_time.monotonic() - start) * 1000,
+        error=str(e),
+        error_type=type(e).__name__,
+      )
+      raise
 
+  @track(
+    "session.run_task",
+    properties_fn=lambda a, kw: {
+      "task": kw.get("task") or (a[1] if len(a) > 1 else None),
+      "max_steps": kw.get("max_steps", 32),
+      "has_response_model": kw.get("response_model") is not None,
+      "url": kw.get("url"),
+    },
+  )
   async def run_task(
     self,
     task: str,
@@ -477,6 +514,17 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
       },
     )
     return ActionRunTaskResponse(**(await self._send_event(event, has_result=True) or {}))  # type: ignore
+
+  async def result(self, timeout: int | None = None, poll_interval: float | None = None):
+    """Waits for the session to close and returns the result."""
+    if self._task_response and self._task_response.status not in ["running", "waiting"]:
+      return self._task_response
+    if not self._closed:
+      raise BadRequestError(
+        "result() cannot be called on an open session. "
+        "Close the session first with close(), or use client.run() for one-shot tasks."
+      )
+    return await self._handle.result(timeout, poll_interval)
 
 
 class TaskHandle(BaseTaskHandle):
@@ -508,7 +556,7 @@ class TaskHandle(BaseTaskHandle):
     """Waits for the task to complete and returns the result."""
     return self._run_async(self._async_handle.result(timeout, poll_interval))
 
-  def live_url(self, interactive: bool = False, embed: bool = False, timeout: int | None = None) -> str:
+  def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None) -> str:
     """Returns the live URL for the task."""
     return self._run_async(self._async_handle.live_url(interactive, embed, timeout))
 
@@ -603,6 +651,10 @@ class SessionHandle(TaskHandleEx):
   ):
     """Extracts from the given URL."""
     return self._run_async(self._async_handle.run_task(task, max_steps, response_model, url, metadata))
+
+  def result(self, timeout: int | None = None, poll_interval: float | None = None) -> "TaskResponse":
+    """Waits for the session to close and returns the result."""
+    return self._run_async(self._async_handle.result(timeout, poll_interval))
 
 
 ###############################################################################################################

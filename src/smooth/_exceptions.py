@@ -1,3 +1,4 @@
+import builtins
 from typing import Any
 
 
@@ -18,7 +19,7 @@ class BadRequestError(Exception):
   pass
 
 
-class TimeoutError(Exception):
+class TimeoutError(builtins.TimeoutError):
   """Custom exception for task timeouts."""
 
   pass

@@ -19,6 +19,11 @@ dependencies = [
 mcp = [
     "fastmcp (>=2.12.0,<3.0.0)"
 ]
+test = [
+    "pytest (>=8.0.0,<9.0.0)",
+    "pytest-asyncio (>=0.24.0,<1.0.0)",
+    "aioresponses (>=0.7.0,<1.0.0)",
+]
 
 [project.scripts]
 smooth = "smooth.cli:main"
@@ -54,8 +59,15 @@ ignore = [
     "B008"  # fastapi
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [tool.pyright]
 typeCheckingMode = "strict"

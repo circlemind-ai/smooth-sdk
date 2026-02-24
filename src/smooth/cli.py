@@ -11,6 +11,7 @@ from typing import Any, cast
 from smooth import SmoothAsyncClient
 from smooth._exceptions import ApiError
 from smooth._interface import AsyncSessionHandle, AsyncTaskHandle
+from smooth._telemetry import Telemetry
 
 
 def print_json(data: Any):
@@ -152,14 +153,17 @@ async def create_profile(args: argparse.Namespace):
   try:
     async with SmoothAsyncClient() as client:
       profile = await client.create_profile(profile_id=args.profile_id)
+      Telemetry.get().record("cli.create_profile")
       if args.json:
         print_success("Profile created successfully", {"profile_id": profile.id})
       else:
         print("Profile created successfully!")
         print(f"Profile ID: {profile.id}")
   except ApiError as e:
+    Telemetry.get().record("cli.create_profile", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to create profile: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.create_profile", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -168,6 +172,7 @@ async def list_profiles(args: argparse.Namespace):
   try:
     async with SmoothAsyncClient() as client:
       profiles = await client.list_profiles()
+      Telemetry.get().record("cli.list_profiles")
       if args.json:
         print_success(
           f"Found {len(profiles)} profile(s)", {"profiles": [{"id": p.id} for p in profiles], "count": len(profiles)}
@@ -180,8 +185,10 @@ async def list_profiles(args: argparse.Namespace):
           for profile in profiles:
             print(f"  - {profile.id}")
   except ApiError as e:
+    Telemetry.get().record("cli.list_profiles", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to list profiles: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.list_profiles", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -190,13 +197,16 @@ async def delete_profile(args: argparse.Namespace):
   try:
     async with SmoothAsyncClient() as client:
       await client.delete_profile(args.profile_id)
+      Telemetry.get().record("cli.delete_profile")
       if args.json:
         print_success(f"Profile '{args.profile_id}' deleted successfully", {"profile_id": args.profile_id})
       else:
         print(f"Profile '{args.profile_id}' deleted successfully!")
   except ApiError as e:
+    Telemetry.get().record("cli.delete_profile", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to delete profile: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.delete_profile", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -206,16 +216,20 @@ async def upload_file(args: argparse.Namespace):
     async with SmoothAsyncClient() as client:
       with open(args.file_path, "rb") as f:
         result = await client.upload_file(f, name=args.name, purpose=args.purpose)
+        Telemetry.get().record("cli.upload_file")
         if args.json:
           print_success("File uploaded successfully", {"file_id": result.id, "name": args.name or args.file_path})
         else:
           print("File uploaded successfully!")
           print(f"File ID: {result.id}")
   except FileNotFoundError:
+    Telemetry.get().record("cli.upload_file", error=f"File not found: {args.file_path}", error_type="FileNotFoundError")
     print_error(f"File not found: {args.file_path}", json_mode=args.json)
   except ApiError as e:
+    Telemetry.get().record("cli.upload_file", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to upload file: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.upload_file", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -224,13 +238,16 @@ async def delete_file(args: argparse.Namespace):
   try:
     async with SmoothAsyncClient() as client:
       await client.delete_file(args.file_id)
+      Telemetry.get().record("cli.delete_file")
       if args.json:
         print_success(f"File '{args.file_id}' deleted successfully", {"file_id": args.file_id})
       else:
         print(f"File '{args.file_id}' deleted successfully!")
   except ApiError as e:
+    Telemetry.get().record("cli.delete_file", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to delete file: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.delete_file", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -276,6 +293,7 @@ async def start_session(args: argparse.Namespace):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      use_captcha_solver=not args.no_captcha_solver,
       show_cursor=True,  # Show mouse cursor by default
       additional_tools={
         "screenshot": {"full_page": False}
@@ -302,6 +320,7 @@ async def start_session(args: argparse.Namespace):
     # Track session in sessions.json (with embed=True URL)
     add_session(session_id=session_id, live_url=live_url_embed, device=args.device, task=None, proxy_pid=proxy_pid)
 
+    Telemetry.get().record("cli.start_session")
     if args.json:
       result = {
         "success": True,
@@ -319,8 +338,10 @@ async def start_session(args: argparse.Namespace):
       print("\nSession is running. Use 'smooth close-session <session-id>' to close it.")
 
   except ApiError as e:
+    Telemetry.get().record("cli.start_session", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to start session: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.start_session", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
   finally:
     await client.close()
@@ -376,10 +397,13 @@ async def close_session(args: argparse.Namespace):
 
   # Report result
   if api_error:
+    Telemetry.get().record("cli.close_session", error=api_error, error_type="CloseError")
     print_error(api_error, json_mode=args.json)
 
     return
-  elif args.json:
+
+  Telemetry.get().record("cli.close_session")
+  if args.json:
     print_success(f"Session '{args.session_id}' closed successfully", {"session_id": args.session_id, "force": args.force})
   else:
     print(f"Session '{args.session_id}' closed successfully!")
@@ -436,6 +460,7 @@ async def run_task(args: argparse.Namespace):
         # Clear task (session is now idle)
         update_session_task(args.session_id, None)
 
+        Telemetry.get().record("cli.run")
         if args.json:
           print_success("Task completed successfully", {"session_id": args.session_id, "result": result.output})
         else:
@@ -444,10 +469,13 @@ async def run_task(args: argparse.Namespace):
       except Exception as e:
         # Clear task on error as well
         update_session_task(args.session_id, None)
+        Telemetry.get().record("cli.run", error=str(e), error_type=type(e).__name__)
         print_error(f"Failed to run task: {str(e)}", json_mode=args.json)
   except ApiError as e:
+    Telemetry.get().record("cli.run", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to run task: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.run", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -458,6 +486,7 @@ async def live_view(args: argparse.Namespace):
       session_handle = AsyncSessionHandle(args.session_id, client)
       live_url = await session_handle.live_url(interactive=True, timeout=30)
 
+      Telemetry.get().record("cli.live_view")
       if args.json:
         print_success("Live view URL retrieved", {"session_id": args.session_id, "live_url": live_url})
       else:
@@ -466,8 +495,10 @@ async def live_view(args: argparse.Namespace):
         print("\nOpen this URL in your browser to view and interact with the session.")
 
   except ApiError as e:
+    Telemetry.get().record("cli.live_view", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to get live view: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.live_view", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -478,6 +509,7 @@ async def download_files(args: argparse.Namespace):
       task_handle = AsyncTaskHandle(args.session_id, client)
       downloads_url = await task_handle.downloads_url(timeout=30)
 
+      Telemetry.get().record("cli.downloads")
       if args.json:
         print_success("Downloads URL retrieved", {"session_id": args.session_id, "downloads_url": downloads_url})
       else:
@@ -486,8 +518,10 @@ async def download_files(args: argparse.Namespace):
         print("\nDownload the files from this URL.")
 
   except ApiError as e:
+    Telemetry.get().record("cli.downloads", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to get downloads: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.downloads", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -547,6 +581,7 @@ async def extract(args: argparse.Namespace):
         # Clear task (session is now idle)
         update_session_task(args.session_id, None)
 
+        Telemetry.get().record("cli.extract")
         if args.json:
           print_success("Data extracted successfully", {"session_id": args.session_id, "data": result.output})
         else:
@@ -558,8 +593,10 @@ async def extract(args: argparse.Namespace):
         raise
 
   except ApiError as e:
+    Telemetry.get().record("cli.extract", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to extract data: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.extract", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
@@ -581,6 +618,7 @@ async def evaluate_js(args: argparse.Namespace):
         print(f"Executing JavaScript in session '{args.session_id}'...")
       result = await session_handle.evaluate_js(code=args.code, args=js_args)
 
+      Telemetry.get().record("cli.evaluate_js")
       if args.json:
         print_success("JavaScript executed successfully", {"session_id": args.session_id, "result": result.output})
       else:
@@ -588,13 +626,16 @@ async def evaluate_js(args: argparse.Namespace):
         print(result.output)
 
   except ApiError as e:
+    Telemetry.get().record("cli.evaluate_js", error=str(e.detail), error_type="ApiError")
     print_error(f"Failed to evaluate JavaScript: {e.detail}", json_mode=args.json)
   except Exception as e:
+    Telemetry.get().record("cli.evaluate_js", error=str(e), error_type=type(e).__name__)
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
 def config_command(args: argparse.Namespace):
   """Configure the Smooth CLI."""
+  Telemetry.get().record("cli.config")
   config = load_config()
 
   if args.api_key:
@@ -696,6 +737,7 @@ def main():
   )
   start_session_parser.add_argument("--proxy-password", help="Proxy password (auto-generated if not provided)")
   start_session_parser.add_argument("--no-proxy", action="store_true", help="Disable proxy (overrides --proxy-server)")
+  start_session_parser.add_argument("--no-captcha-solver", action="store_true", help="Disable the captcha solver")
   start_session_parser.add_argument("--json", action="store_true", help="Output as JSON")
   start_session_parser.set_defaults(func=start_session)
 
@@ -766,7 +808,9 @@ def main():
 
   # Check for API key if required
   if args.command not in no_api_key_commands:
-    load_api_key()
+    api_key = load_api_key()
+    if api_key:
+      Telemetry.get().init(api_key)
 
   # Run the appropriate function (sync for proxy commands, async for others)
   if hasattr(args, "func"):

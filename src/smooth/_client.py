@@ -15,8 +15,9 @@ from pydantic import BaseModel
 
 from smooth._interface import AsyncSessionHandle, AsyncTaskHandle, BrowserSessionHandle, SessionHandle, TaskHandle
 
-from ._config import BASE_URL
+from ._config import BASE_URL, SDK_VERSION
 from ._exceptions import ApiError
+from ._telemetry import Telemetry, track
 from ._tools import AsyncSmoothTool, SmoothTool
 from ._utils import logger, process_certificates
 from .models import (
@@ -92,8 +93,10 @@ class BaseClient:
     self.base_url = f"{base_url.rstrip('/')}/{api_version}"
     self.headers = {
       "apikey": self.api_key,
-      "User-Agent": "smooth-python-sdk/0.4.0",
+      "User-Agent": f"smooth-python-sdk/{SDK_VERSION}",
     }
+
+    Telemetry.get().init(self.api_key)
 
   async def _handle_response(self, response: aiohttp.ClientResponse) -> dict[str, Any]:
     """Handles HTTP responses and raises exceptions for errors."""
@@ -625,6 +628,16 @@ class SmoothAsyncClient(BaseClient):
     self._client: aiohttp.ClientSession | RetryClient | None = None
     self._retry_client: RetryClient | None = None
 
+  @track(
+    "sdk.session",
+    properties_fn=lambda a, kw: {
+      "url": kw.get("url") or (a[1] if len(a) > 1 else None),
+      "device": kw.get("device", "desktop"),
+      "profile_id": kw.get("profile_id"),
+      "stealth_mode": kw.get("stealth_mode", False),
+      "proxy_server": kw.get("proxy_server"),
+    },
+  )
   async def session(
     self,
     url: str | None = None,
@@ -690,6 +703,20 @@ class SmoothAsyncClient(BaseClient):
 
     return handle
 
+  @track(
+    "sdk.run",
+    properties_fn=lambda a, kw: {
+      "task": kw.get("task") or (a[1] if len(a) > 1 else None),
+      "url": kw.get("url"),
+      "device": kw.get("device", "desktop"),
+      "max_steps": kw.get("max_steps", 32),
+      "profile_id": kw.get("profile_id"),
+      "stealth_mode": kw.get("stealth_mode", False),
+      "use_adblock": kw.get("use_adblock", True),
+      "has_response_model": kw.get("response_model") is not None,
+      "has_custom_tools": kw.get("custom_tools") is not None,
+    },
+  )
   async def run(
     self,
     task: str,
@@ -832,6 +859,9 @@ class SmoothAsyncClient(BaseClient):
 
   # --- Profile Methods --- #
 
+  @track(
+    "sdk.create_profile", properties_fn=lambda a, kw: {"profile_id": kw.get("profile_id") or (a[1] if len(a) > 1 else None)}
+  )
   async def create_profile(self, profile_id: str | None = None) -> ProfileResponse:
     """Creates a new browser profile.
 
@@ -853,6 +883,7 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  @track("sdk.list_profiles")
   async def list_profiles(self):
     """Lists all browser profiles for the user.
 
@@ -871,6 +902,9 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  @track(
+    "sdk.delete_profile", properties_fn=lambda a, kw: {"profile_id": kw.get("profile_id") or (a[1] if len(a) > 1 else None)}
+  )
   async def delete_profile(self, profile_id: str):
     """Delete a browser profile.
 
@@ -890,6 +924,7 @@ class SmoothAsyncClient(BaseClient):
 
   # --- File Uploads Methods --- #
 
+  @track("sdk.upload_file", properties_fn=lambda a, kw: {"name": kw.get("name"), "purpose": kw.get("purpose")})
   async def upload_file(self, file: io.IOBase, name: str | None = None, purpose: str | None = None) -> UploadFileResponse:
     """Upload a file and return the file ID.
 
@@ -923,6 +958,7 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  @track("sdk.delete_file", properties_fn=lambda a, kw: {"file_id": kw.get("file_id") or (a[1] if len(a) > 1 else None)})
   async def delete_file(self, file_id: str):
     """Delete a file by its ID."""
     try:
@@ -935,6 +971,7 @@ class SmoothAsyncClient(BaseClient):
 
   # --- Extension Methods --- #
 
+  @track("sdk.upload_extension", properties_fn=lambda a, kw: {"name": kw.get("name")})
   async def upload_extension(self, file: io.IOBase, name: str | None = None) -> UploadExtensionResponse:
     """Upload an extension and return the extension ID."""
     try:
@@ -953,6 +990,7 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  @track("sdk.list_extensions")
   async def list_extensions(self):
     """List all extensions."""
     try:
@@ -964,6 +1002,10 @@ class SmoothAsyncClient(BaseClient):
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
 
+  @track(
+    "sdk.delete_extension",
+    properties_fn=lambda a, kw: {"extension_id": kw.get("extension_id") or (a[1] if len(a) > 1 else None)},
+  )
   async def delete_extension(self, extension_id: str):
     """Delete an extension by its ID."""
     try:
@@ -984,7 +1026,7 @@ class SmoothAsyncClient(BaseClient):
         attempts=self._retries + 1,
         start_timeout=0.5,
         max_timeout=10.0,
-        exceptions={aiohttp.ServerDisconnectedError, aiohttp.ClientConnectorError, ConnectionResetError},
+        exceptions={aiohttp.ServerDisconnectedError, aiohttp.ClientConnectorError, ConnectionResetError, TimeoutError},
       )
       self._retry_client = RetryClient(client_session=self._client, retry_options=retry_options)
     return self
