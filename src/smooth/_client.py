@@ -306,6 +306,10 @@ class SmoothClient(BaseClient):
       [tool if isinstance(tool, SmoothTool) else SmoothTool(**tool) for tool in custom_tools] if custom_tools else None
     )
 
+    # Handle proxy_server="self" - auto-generate password if not provided
+    if proxy_server == "self" and not proxy_password:
+      proxy_password = secrets.token_urlsafe(12)
+
     async_handle = self._run_async(
       self._async_client.run(
         task=task,
@@ -787,6 +791,10 @@ class SmoothAsyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
+    # Handle proxy_server="self" - auto-generate password if not provided
+    if proxy_server == "self" and proxy_password is None:
+      proxy_password = secrets.token_urlsafe(12)
+
     certificates_ = process_certificates(certificates)
     custom_tools_ = (
       [tool if isinstance(tool, AsyncSmoothTool) else AsyncSmoothTool(**tool) for tool in custom_tools]
