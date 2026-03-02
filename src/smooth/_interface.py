@@ -233,6 +233,8 @@ class AsyncTaskHandle(BaseTaskHandle):
 
     async def _poller():
       poller_id = generate()
+      consecutive_failures = 0
+      max_retries = 5
       try:
         logger.debug(f"Starting poller {poller_id} for task {self.id()}")
         try:
@@ -240,7 +242,19 @@ class AsyncTaskHandle(BaseTaskHandle):
             logger.debug(f"{poller_id} - polling")
             await asyncio.sleep(self._poll_interval)
 
-            task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
+            try:
+              task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
+            except ApiError as e:
+              if e.status_code != 0:
+                raise
+              consecutive_failures += 1
+              if consecutive_failures > max_retries:
+                raise
+              backoff = min(2 ** (consecutive_failures - 1), 16)
+              logger.warning("Poller %s transient error (attempt %d/%d), retrying in %ds: %s", poller_id, consecutive_failures, max_retries, backoff, e)
+              await asyncio.sleep(backoff)
+              continue
+            consecutive_failures = 0
             self._task_response = task_response
 
             if task_response.status not in ["running", "waiting"]:

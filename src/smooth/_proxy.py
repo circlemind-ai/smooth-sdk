@@ -9,12 +9,15 @@ The proxy connects to a remote FRP server and exposes a local SOCKS5 proxy
 that can be used by the browser session.
 """
 
+import logging
 import platform
 import shutil
 import subprocess
 import tarfile
 import tempfile
 import threading
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from dataclasses import dataclass, field
@@ -122,7 +125,17 @@ class FRPProxy:
       with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
         tmp_path = Path(tmp.name)
 
-      urllib.request.urlretrieve(url, tmp_path)
+      max_retries = 3
+      for attempt in range(max_retries):
+        try:
+          urllib.request.urlretrieve(url, tmp_path)
+          break
+        except (urllib.error.URLError, OSError) as e:
+          if attempt == max_retries - 1:
+            raise
+          backoff = 2 ** attempt
+          logging.getLogger("smooth").warning("FRP download failed (attempt %d/%d), retrying in %ds: %s", attempt + 1, max_retries, backoff, e)
+          time.sleep(backoff)
 
       # Extract
       extract_dir = FRP_DIR / "extract_tmp"
