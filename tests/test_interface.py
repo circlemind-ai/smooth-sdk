@@ -1,5 +1,6 @@
 """Tests for smooth._interface."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,8 +14,10 @@ from smooth._interface import (
   BrowserSessionHandle,
   SessionHandle,
   TaskHandle,
+  TaskHandleEx,
 )
-from smooth.models import BrowserSessionResponse, TaskEvent, TaskResponse
+from smooth._tools import SmoothTool
+from smooth.models import BrowserSessionResponse, TaskEvent, TaskResponse, ToolSignature
 
 
 FAKE_KEY = "cmzr-test-key-0123456789abcdef"
@@ -281,6 +284,56 @@ class TestAsyncSessionHandle:
     handle = self._make_handle()
     with pytest.raises(BadRequestError, match="result\\(\\) cannot be called on an open session"):
       await handle.result()
+
+
+# --- SessionHandle (sync) ---
+
+
+class TestSessionHandle:
+  def test_init_shares_inner_async_handle(self):
+    """SessionHandle must share the same AsyncTaskHandle between sync and async paths."""
+    client = MagicMock()
+    client._async_client = AsyncMock()
+    client._async_client._get_task = AsyncMock(return_value=TaskResponse(id="t-1", status="running"))
+    client._loop = asyncio.new_event_loop()
+
+    handle = SessionHandle("t-1", client)
+
+    # The sync TaskHandle and AsyncSessionHandle must share the same inner AsyncTaskHandle
+    assert handle._handle._async_handle is handle._async_handle._handle
+
+  def test_init_task_handle_links_to_sync_handle(self):
+    """The inner AsyncTaskHandle's _task_handle must be the sync TaskHandle."""
+    client = MagicMock()
+    client._async_client = AsyncMock()
+    client._async_client._get_task = AsyncMock(return_value=TaskResponse(id="t-1", status="running"))
+    client._loop = asyncio.new_event_loop()
+
+    handle = SessionHandle("t-1", client)
+
+    inner_async_handle = handle._async_handle._handle
+    assert inner_async_handle._task_handle is handle._handle
+
+  def test_smooth_tool_receives_sync_handle(self):
+    """When the poller calls a SmoothTool, it must pass a TaskHandle (not AsyncTaskHandle)."""
+    client = MagicMock()
+    client._async_client = AsyncMock()
+    client._async_client._get_task = AsyncMock(return_value=TaskResponse(id="t-1", status="running"))
+    client._loop = asyncio.new_event_loop()
+
+    def my_tool(x: str):
+      return f"got {x}"
+
+    tool = SmoothTool(
+      signature=ToolSignature(name="my_tool", description="test", inputs={"x": {"type": "string"}}, output="string"),
+      fn=my_tool,
+      essential=True,
+    )
+    handle = SessionHandle("t-1", client, tools=[tool])
+
+    # The _task_handle that the poller passes to tools must be a TaskHandle
+    inner_async_handle = handle._async_handle._handle
+    assert isinstance(inner_async_handle._task_handle, TaskHandle)
 
 
 # --- BrowserSessionHandle (deprecated) ---
