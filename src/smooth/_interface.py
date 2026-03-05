@@ -639,8 +639,13 @@ class SessionHandle(TaskHandleEx):
 
   def __init__(self, task_id: str, client: "SmoothClient", tools: Sequence["SmoothTool"] | None = None):
     """Initializes the task handle."""
-    self._handle = TaskHandle(task_id, client, tools)
+    # Create async session handle first (which creates the inner AsyncTaskHandle)
     self._async_handle = AsyncSessionHandle(task_id, client._async_client, tools)
+    # Share the SAME inner AsyncTaskHandle with the sync TaskHandle
+    inner_async_handle = self._async_handle._handle
+    self._handle = TaskHandle(task_id, client, tools, task_handle=inner_async_handle)
+    # Link back so the poller passes the sync TaskHandle to SmoothTool.__call__
+    inner_async_handle._task_handle = self._handle
 
   def __enter__(self):
     """Enters the context manager."""
