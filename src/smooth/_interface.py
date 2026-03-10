@@ -2,7 +2,7 @@
 import asyncio
 import random
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, Coroutine, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Coroutine, Sequence, Type, TypeVar
 
 from deprecated import deprecated
 from nanoid import generate
@@ -509,11 +509,13 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
     self,
     task: str,
     max_steps: int = 32,
-    response_model: dict[str, Any] | None = None,
+    response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, Any] | None = None,
   ):
     """Extracts from the given URL."""
+    if response_model is not None and not isinstance(response_model, dict):
+      response_model = response_model.model_json_schema()
     event = TaskEvent(
       name="session_action",
       payload={
@@ -664,7 +666,7 @@ class SessionHandle(TaskHandleEx):
     self,
     task: str,
     max_steps: int = 32,
-    response_model: dict[str, Any] | None = None,
+    response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, Any] | None = None,
   ):
