@@ -307,7 +307,7 @@ class SmoothClient(BaseClient):
       [tool if isinstance(tool, SmoothTool) else SmoothTool(**tool) for tool in custom_tools] if custom_tools else None
     )
 
-    if proxy_server == "self":
+    if proxy_server == "self" and task is not None:
       raise BadRequestError(
         'proxy_server="self" is not supported in run(). '
         "Use session() instead, which supports the self-proxy feature."
@@ -830,7 +830,7 @@ class SmoothAsyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
-    if proxy_server == "self":
+    if proxy_server == "self" and task is not None:
       raise BadRequestError(
         'proxy_server="self" is not supported in run(). '
         "Use session() instead, which supports the self-proxy feature."
