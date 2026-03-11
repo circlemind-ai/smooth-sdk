@@ -103,7 +103,7 @@ class AsyncTaskHandle(BaseTaskHandle):
         await asyncio.sleep(0.2)
       raise TimeoutError(f"Task {self.id()} did not complete within {timeout} seconds.")
 
-  async def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None):
+  async def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = 60):
     """Returns the live URL for the task."""
     if self._task_response and self._task_response.status not in ["waiting", "running"]:
       raise BadRequestError(f"Live URL not available for task {self.id()} as it is {self._task_response.status}.")
@@ -130,8 +130,27 @@ class AsyncTaskHandle(BaseTaskHandle):
       return self._task_response.recording_url
 
     loop = asyncio.get_running_loop()
+    start_time = loop.time()
+
+    # If the task is already done, poll the API directly without starting a new poller
+    if self._task_response and self._task_response.status not in ["waiting", "running"]:
+      while timeout is None or (loop.time() - start_time) < timeout:
+        task_response = await self._client._get_task(self.id())
+        if task_response.recording_url is not None:
+          if not task_response.recording_url:
+            raise ApiError(
+              status_code=404,
+              detail=(
+                f"Recording URL not available for task {self.id()}."
+                " Set `enable_recording=True` when creating the task to enable it."
+              ),
+            )
+          return task_response.recording_url
+        await asyncio.sleep(0.8)
+      raise TimeoutError(f"Recording URL not available for task {self.id()}.")
+
+    # Task is still running - use poller to wait for updates
     async with self._connection():
-      start_time = loop.time()
       while timeout is None or (loop.time() - start_time) < timeout:
         if self._task_response and self._task_response.recording_url is not None:
           if not self._task_response.recording_url:
@@ -143,10 +162,26 @@ class AsyncTaskHandle(BaseTaskHandle):
               ),
             )
           return self._task_response.recording_url
+        # If task completed while we were waiting, switch to direct polling
+        if self._task_response and self._task_response.status not in ["waiting", "running"]:
+          break
         await asyncio.sleep(0.2)
 
-    if self._task_response and self._task_response.status in ["waiting", "running"]:
-      raise BadRequestError(f"Recording URL not available for task {self.id()} while it is still running.")
+    # Task completed but recording_url not yet available - poll API directly for remaining time
+    while timeout is None or (loop.time() - start_time) < timeout:
+      task_response = await self._client._get_task(self.id())
+      if task_response.recording_url is not None:
+        if not task_response.recording_url:
+          raise ApiError(
+            status_code=404,
+            detail=(
+              f"Recording URL not available for task {self.id()}."
+              " Set `enable_recording=True` when creating the task to enable it."
+            ),
+          )
+        return task_response.recording_url
+      await asyncio.sleep(0.8)
+
     raise TimeoutError(f"Recording URL not available for task {self.id()}.")
 
   async def downloads_url(self, timeout: int | None = 30) -> str:
@@ -155,27 +190,38 @@ class AsyncTaskHandle(BaseTaskHandle):
       return self._task_response.downloads_url
 
     loop = asyncio.get_running_loop()
+    start_time = loop.time()
+
+    async def _poll_downloads_url() -> str:
+      """Poll the API directly for the downloads URL."""
+      while timeout is None or (loop.time() - start_time) < timeout:
+        task_response = await self._client._get_task(self.id(), query_params={"downloads": "true"})
+        if task_response.downloads_url is not None:
+          if not task_response.downloads_url:
+            raise ApiError(
+              status_code=404,
+              detail=(
+                f"Downloads URL not available for task {self.id()}."
+                " Make sure the task downloaded files during its execution."
+              ),
+            )
+          return task_response.downloads_url
+        await asyncio.sleep(0.8)
+      raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
+
+    # If the task is already done, poll the API directly without starting a new poller
+    if self._task_response and self._task_response.status not in ["waiting", "running"]:
+      return await _poll_downloads_url()
+
+    # Task is still running - use poller to wait for completion
     async with self._connection():
-      start_time = loop.time()
       while timeout is None or (loop.time() - start_time) < timeout:
         if self._task_response and self._task_response.status not in ["waiting", "running"]:
-          task_response = await self._client._get_task(self.id(), query_params={"downloads": "true"})
-          if task_response.downloads_url is not None:
-            if not task_response.downloads_url:
-              raise ApiError(
-                status_code=404,
-                detail=(
-                  f"Downloads URL not available for task {self.id()}."
-                  " Make sure the task downloaded files during its execution."
-                ),
-              )
-            return task_response.downloads_url
-          await asyncio.sleep(0.8)
+          break
         await asyncio.sleep(0.2)
 
-    if self._task_response and self._task_response.status in ["waiting", "running"]:
-      raise BadRequestError(f"Downloads URL not available for task {self.id()} while it is still running.")
-    raise TimeoutError(f"Downloads URL not available for task {self.id()}.")
+    # Task completed - poll API directly for the downloads URL
+    return await _poll_downloads_url()
 
   # --- Proxy Methods ---
 
@@ -258,7 +304,8 @@ class AsyncTaskHandle(BaseTaskHandle):
             self._task_response = task_response
 
             if task_response.status not in ["running", "waiting"]:
-              raise RuntimeError("Task is not running.")
+              logger.debug("Poller %s for task %s: task completed with status %s", poller_id, self.id(), task_response.status)
+              break
             elif task_response.events:
               self._last_event_t = task_response.events[-1].timestamp or self._last_event_t
               for event in task_response.events:
@@ -286,10 +333,22 @@ class AsyncTaskHandle(BaseTaskHandle):
         except asyncio.CancelledError:
           logger.debug("Poller %s for task %s cancelled", poller_id, self.id())
           raise
+
+        # Task completed gracefully - stop polling but keep _task_response intact
+        self._is_alive = 0
+        for future in self._event_futures.values():
+          if not future.done():
+            future.cancel()
+        self._event_futures.clear()
+        for task in self._tool_tasks.values():
+          if not task.done():
+            task.cancel()
+        self._tool_tasks.clear()
+        logger.debug("Poller %s for task %s finished: task completed", poller_id, self.id())
       except Exception as e:
         self._is_alive = 0
 
-        # Stop all pending futures
+        # Stop all pending futures with the error
         for future in self._event_futures.values():
           if not future.done():
             future.set_exception(e)
@@ -300,6 +359,7 @@ class AsyncTaskHandle(BaseTaskHandle):
           if not task.done():
             task.cancel()
         self._tool_tasks.clear()
+
         logger.error("Poller %s for task %s failed: %s", poller_id, self.id(), e)
       logger.debug("Poller %s for task %s stopped", poller_id, self.id())
 
@@ -572,15 +632,15 @@ class TaskHandle(BaseTaskHandle):
     """Waits for the task to complete and returns the result."""
     return self._run_async(self._async_handle.result(timeout, poll_interval))
 
-  def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = None) -> str:
+  def live_url(self, interactive: bool = True, embed: bool = False, timeout: int | None = 60) -> str:
     """Returns the live URL for the task."""
     return self._run_async(self._async_handle.live_url(interactive, embed, timeout))
 
-  def recording_url(self, timeout: int | None = None) -> str:
+  def recording_url(self, timeout: int | None = 30) -> str:
     """Returns the recording URL for the task."""
     return self._run_async(self._async_handle.recording_url(timeout))
 
-  def downloads_url(self, timeout: int | None = None) -> str:
+  def downloads_url(self, timeout: int | None = 30) -> str:
     """Returns the downloads URL for the task."""
     return self._run_async(self._async_handle.downloads_url(timeout))
 

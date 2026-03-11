@@ -73,7 +73,7 @@ class TaskRequest(BaseModel):
     description="A dictionary containing variables or parameters that will be passed to the agent.",
   )
   files: list[str] | None = Field(default=None, description="A list of file ids to pass to the agent.")
-  agent: Literal["smooth", "smooth-lite"] = Field(default="smooth", description="The agent to use for the task.")
+  agent: str = Field(default="smooth", description="The agent to use for the task. Default is 'smooth'.")
   max_steps: int = Field(
     default=32,
     ge=2,

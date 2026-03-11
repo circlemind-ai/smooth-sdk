@@ -6,7 +6,8 @@ import os
 import secrets
 import threading
 from pathlib import Path
-from typing import Any, Callable, Coroutine, Literal, Sequence, Type, TypedDict, TypeVar, cast
+from types import TracebackType
+from typing import Any, Callable, Coroutine, Generator, Sequence, Type, TypedDict, TypeVar, cast
 
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
@@ -16,7 +17,7 @@ from pydantic import BaseModel
 from smooth._interface import AsyncSessionHandle, AsyncTaskHandle, BrowserSessionHandle, SessionHandle, TaskHandle
 
 from ._config import BASE_URL, SDK_VERSION
-from ._exceptions import ApiError
+from ._exceptions import ApiError, BadRequestError
 from ._telemetry import Telemetry, track
 from ._tools import AsyncSmoothTool, SmoothTool
 from ._utils import logger, process_certificates
@@ -170,7 +171,7 @@ class SmoothClient(BaseClient):
     self,
     url: str | None = None,
     files: list[str] | None = None,
-    agent: Literal["smooth"] = "smooth",
+    agent: str = "smooth",
     device: DeviceType = "desktop",
     allowed_urls: list[str] | None = None,
     enable_recording: bool = True,
@@ -225,7 +226,7 @@ class SmoothClient(BaseClient):
     # Auto-start proxy immediately if configured
     if self_proxy:
       try:
-        proxy_url = _get_proxy_url(handle.live_url(timeout=30))
+        proxy_url = _get_proxy_url(handle.live_url(timeout=60))
         handle._start_proxy(proxy_url, cast(str, proxy_password))
       except Exception as e:
         raise RuntimeError("Failed to start self-proxy.") from e
@@ -239,7 +240,7 @@ class SmoothClient(BaseClient):
     url: str | None = None,
     metadata: dict[str, str | int | float | bool] | None = None,
     files: list[str] | None = None,
-    agent: Literal["smooth"] = "smooth",
+    agent: str = "smooth",
     max_steps: int = 32,
     device: DeviceType = "desktop",
     allowed_urls: list[str] | None = None,
@@ -306,9 +307,11 @@ class SmoothClient(BaseClient):
       [tool if isinstance(tool, SmoothTool) else SmoothTool(**tool) for tool in custom_tools] if custom_tools else None
     )
 
-    # Handle proxy_server="self" - auto-generate password if not provided
-    if proxy_server == "self" and not proxy_password:
-      proxy_password = secrets.token_urlsafe(12)
+    if proxy_server == "self":
+      raise BadRequestError(
+        'proxy_server="self" is not supported in run(). '
+        "Use session() instead, which supports the self-proxy feature."
+      )
 
     async_handle = self._run_async(
       self._async_client.run(
@@ -436,59 +439,6 @@ class SmoothClient(BaseClient):
     """Delete an extension by its ID."""
     return self._run_async(self._async_client.delete_extension(extension_id))
 
-  # --- Proxy Methods --- #
-
-  # def start_proxy(
-  #   self,
-  #   provider: Literal["cloudflare", "serveo", "microsoft"] = "cloudflare",
-  #   port: int = 8888,
-  #   timeout: int = 30,
-  #   verbose: bool = False,
-  #   username: str | None = None,
-  #   password: str | None = None,
-  # ) -> ProxyConfig:
-  #   """Start a local proxy server with public tunnel exposure.
-
-  #   The proxy runs in a background thread and can be stopped with stop_proxy().
-  #   Returns a dict with proxy credentials that can be unpacked into session/run methods.
-
-  #   Example:
-  #       proxy_config = client.start_proxy()
-  #       client.session(**proxy_config)
-  #       # ... use the session ...
-  #       client.stop_proxy()
-
-  #   Args:
-  #       provider: Tunnel provider ("cloudflare", "serveo", or "microsoft").
-  #       port: Local port for the proxy server.
-  #       timeout: Tunnel timeout in seconds.
-  #       verbose: Enable verbose output.
-  #       username: Optional proxy username. If not provided, randomly generated.
-  #       password: Optional proxy password. If not provided, randomly generated.
-
-  #   Returns:
-  #       ProxyConfig dict with keys: proxy_server, proxy_username, proxy_password
-
-  #   Raises:
-  #       RuntimeError: If proxy is already running or fails to start.
-  #   """
-  #   return self._async_client.start_proxy(
-  #     provider=provider,
-  #     port=port,
-  #     timeout=timeout,
-  #     verbose=verbose,
-  #     username=username,
-  #     password=password,
-  #   )
-
-  # def stop_proxy(self):
-  #   """Stop the running proxy server.
-
-  #   Raises:
-  #       RuntimeError: If no proxy is currently running.
-  #   """
-  #   return self._async_client.stop_proxy()
-
   # --- Private Methods ---
 
   def _run_loop(self):
@@ -606,6 +556,38 @@ class SmoothClient(BaseClient):
 # --- Asynchronous Client ---
 
 
+class _AsyncSessionContextManager:
+  """Wrapper that supports both ``await client.session(...)`` and ``async with client.session(...):``."""
+
+  __slots__ = ("_coro", "_handle")
+
+  def __init__(self, coro: Coroutine[Any, Any, AsyncSessionHandle]) -> None:
+    self._coro = coro
+    self._handle: AsyncSessionHandle | None = None
+
+  # --- await support ---
+
+  def __await__(self) -> Generator[Any, None, AsyncSessionHandle]:
+    return self._coro.__await__()
+
+  # --- async with support ---
+
+  async def __aenter__(self) -> AsyncSessionHandle:
+    self._handle = await self._coro
+    await self._handle.__aenter__()
+    return self._handle
+
+  async def __aexit__(
+    self,
+    exc_type: Type[BaseException] | None,
+    exc_val: BaseException | None,
+    exc_tb: TracebackType | None,
+  ) -> None:
+    assert self._handle is not None
+    await self._handle.__aexit__(exc_type, exc_val, exc_tb)
+    self._handle = None
+
+
 class SmoothAsyncClient(BaseClient):
   """An asynchronous client for the API."""
 
@@ -632,21 +614,11 @@ class SmoothAsyncClient(BaseClient):
     self._client: aiohttp.ClientSession | RetryClient | None = None
     self._retry_client: RetryClient | None = None
 
-  @track(
-    "sdk.session",
-    properties_fn=lambda a, kw: {
-      "url": kw.get("url") or (a[1] if len(a) > 1 else None),
-      "device": kw.get("device", "desktop"),
-      "profile_id": kw.get("profile_id"),
-      "stealth_mode": kw.get("stealth_mode", False),
-      "proxy_server": kw.get("proxy_server"),
-    },
-  )
-  async def session(
+  def session(
     self,
     url: str | None = None,
     files: list[str] | None = None,
-    agent: Literal["smooth"] = "smooth",
+    agent: str = "smooth",
     device: DeviceType = "desktop",
     allowed_urls: list[str] | None = None,
     enable_recording: bool = True,
@@ -664,8 +636,75 @@ class SmoothAsyncClient(BaseClient):
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
     show_cursor: bool = False,
-  ):
-    """Opens a browser session."""
+  ) -> _AsyncSessionContextManager:
+    """Opens a browser session.
+
+    Can be used as either::
+
+        session = await client.session(...)
+
+    or::
+
+        async with client.session(...) as session:
+            ...
+    """
+    return _AsyncSessionContextManager(self._session_coro(
+      url=url,
+      files=files,
+      agent=agent,
+      device=device,
+      allowed_urls=allowed_urls,
+      enable_recording=enable_recording,
+      profile_id=profile_id,
+      profile_read_only=profile_read_only,
+      stealth_mode=stealth_mode,
+      proxy_server=proxy_server,
+      proxy_username=proxy_username,
+      proxy_password=proxy_password,
+      certificates=certificates,
+      use_adblock=use_adblock,
+      use_captcha_solver=use_captcha_solver,
+      additional_tools=additional_tools,
+      custom_tools=custom_tools,
+      experimental_features=experimental_features,
+      extensions=extensions,
+      show_cursor=show_cursor,
+    ))
+
+  @track(
+    "sdk.session",
+    properties_fn=lambda a, kw: {
+      "url": kw.get("url") or (a[1] if len(a) > 1 else None),
+      "device": kw.get("device", "desktop"),
+      "profile_id": kw.get("profile_id"),
+      "stealth_mode": kw.get("stealth_mode", False),
+      "proxy_server": kw.get("proxy_server"),
+    },
+  )
+  async def _session_coro(
+    self,
+    url: str | None = None,
+    files: list[str] | None = None,
+    agent: str = "smooth",
+    device: DeviceType = "desktop",
+    allowed_urls: list[str] | None = None,
+    enable_recording: bool = True,
+    profile_id: str | None = None,
+    profile_read_only: bool = False,
+    stealth_mode: bool = False,
+    proxy_server: str | None = None,
+    proxy_username: str | None = None,
+    proxy_password: str | None = None,
+    certificates: list[Certificate | dict[str, Any]] | None = None,
+    use_adblock: bool | None = True,
+    use_captcha_solver: bool | None = True,
+    additional_tools: dict[str, dict[str, Any] | None] | None = None,
+    custom_tools: Sequence[AsyncSmoothTool | dict[str, Any]] | None = None,
+    experimental_features: dict[str, Any] | None = None,
+    extensions: list[str] | None = None,
+    show_cursor: bool = False,
+  ) -> AsyncSessionHandle:
+    """Internal coroutine for session creation."""
     # Handle proxy_server="self" - auto-start local proxy tunnel
     self_proxy = proxy_server == "self"
     if self_proxy and proxy_password is None:
@@ -700,7 +739,7 @@ class SmoothAsyncClient(BaseClient):
     # Auto-start proxy immediately if configured
     if self_proxy:
       try:
-        proxy_url = _get_proxy_url(await handle.live_url(timeout=30))
+        proxy_url = _get_proxy_url(await handle.live_url(timeout=60))
         handle._start_proxy(proxy_url, cast(str, proxy_password))
       except Exception as e:
         raise RuntimeError("Failed to start self-proxy.") from e
@@ -728,7 +767,7 @@ class SmoothAsyncClient(BaseClient):
     url: str | None = None,
     metadata: dict[str, str | int | float | bool] | None = None,
     files: list[str] | None = None,
-    agent: Literal["smooth"] = "smooth",
+    agent: str = "smooth",
     max_steps: int = 32,
     device: DeviceType = "desktop",
     allowed_urls: list[str] | None = None,
@@ -791,9 +830,11 @@ class SmoothAsyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
-    # Handle proxy_server="self" - auto-generate password if not provided
-    if proxy_server == "self" and proxy_password is None:
-      proxy_password = secrets.token_urlsafe(12)
+    if proxy_server == "self":
+      raise BadRequestError(
+        'proxy_server="self" is not supported in run(). '
+        "Use session() instead, which supports the self-proxy feature."
+      )
 
     certificates_ = process_certificates(certificates)
     custom_tools_ = (
