@@ -30,6 +30,9 @@ FRP_VERSION = "0.66.0"
 # Directory to store FRP binaries and configs
 FRP_DIR = Path.home() / ".smooth" / "frp"
 
+# Lock to prevent concurrent FRP installations from racing
+_install_lock = threading.Lock()
+
 
 @dataclass
 class ProxyConfig:
@@ -115,57 +118,62 @@ class FRPProxy:
     if bin_path.exists():
       return bin_path
 
-    # Construct download URL
-    folder_name = f"frp_{FRP_VERSION}_{os_name}_{arch}"
-    filename = f"{folder_name}.{ext}"
-    url = f"https://github.com/fatedier/frp/releases/download/v{FRP_VERSION}/{filename}"
-
-    try:
-      # Download to temp file
-      with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
-        tmp_path = Path(tmp.name)
-
-      max_retries = 3
-      for attempt in range(max_retries):
-        try:
-          urllib.request.urlretrieve(url, tmp_path)
-          break
-        except (urllib.error.URLError, OSError) as e:
-          if attempt == max_retries - 1:
-            raise
-          backoff = 2 ** attempt
-          logging.getLogger("smooth").warning("FRP download failed (attempt %d/%d), retrying in %ds: %s", attempt + 1, max_retries, backoff, e)
-          time.sleep(backoff)
-
-      # Extract
-      extract_dir = FRP_DIR / "extract_tmp"
-      extract_dir.mkdir(exist_ok=True)
-
-      if ext == "zip":
-        with zipfile.ZipFile(tmp_path, "r") as z:
-          z.extractall(extract_dir)
-      else:
-        with tarfile.open(tmp_path, "r:gz") as t:
-          t.extractall(extract_dir)
-
-      # Move binary
-      src = extract_dir / folder_name / bin_name
+    with _install_lock:
+      # Re-check after acquiring lock (another thread may have installed it)
       if bin_path.exists():
-        bin_path.unlink()
-      shutil.move(str(src), str(bin_path))
+        return bin_path
 
-      # Cleanup
-      tmp_path.unlink()
-      shutil.rmtree(extract_dir, ignore_errors=True)
+      # Construct download URL
+      folder_name = f"frp_{FRP_VERSION}_{os_name}_{arch}"
+      filename = f"{folder_name}.{ext}"
+      url = f"https://github.com/fatedier/frp/releases/download/v{FRP_VERSION}/{filename}"
 
-      # Make executable on Unix
-      if os_name != "windows":
-        bin_path.chmod(0o755)
+      try:
+        # Download to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}") as tmp:
+          tmp_path = Path(tmp.name)
 
-      return bin_path
+        max_retries = 3
+        for attempt in range(max_retries):
+          try:
+            urllib.request.urlretrieve(url, tmp_path)
+            break
+          except (urllib.error.URLError, OSError) as e:
+            if attempt == max_retries - 1:
+              raise
+            backoff = 2 ** attempt
+            logging.getLogger("smooth").warning("FRP download failed (attempt %d/%d), retrying in %ds: %s", attempt + 1, max_retries, backoff, e)
+            time.sleep(backoff)
 
-    except Exception as e:
-      raise RuntimeError(f"Failed to install FRP: {e}") from e
+        # Extract to a unique temp dir to avoid races
+        extract_dir = FRP_DIR / f"extract_tmp_{threading.get_ident()}"
+        extract_dir.mkdir(exist_ok=True)
+
+        if ext == "zip":
+          with zipfile.ZipFile(tmp_path, "r") as z:
+            z.extractall(extract_dir)
+        else:
+          with tarfile.open(tmp_path, "r:gz") as t:
+            t.extractall(extract_dir)
+
+        # Move binary
+        src = extract_dir / folder_name / bin_name
+        if bin_path.exists():
+          bin_path.unlink()
+        shutil.move(str(src), str(bin_path))
+
+        # Cleanup
+        tmp_path.unlink()
+        shutil.rmtree(extract_dir, ignore_errors=True)
+
+        # Make executable on Unix
+        if os_name != "windows":
+          bin_path.chmod(0o755)
+
+        return bin_path
+
+      except Exception as e:
+        raise RuntimeError(f"Failed to install FRP: {e}") from e
 
   def _create_config(self) -> Path:
     """Create FRP client configuration file.
