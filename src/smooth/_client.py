@@ -169,7 +169,6 @@ class SmoothClient(BaseClient):
 
   def session(
     self,
-    url: str | None = None,
     files: list[str] | None = None,
     agent: str = "smooth",
     device: DeviceType = "desktop",
@@ -198,7 +197,7 @@ class SmoothClient(BaseClient):
 
     task_handle = self.run(
       task=None,  # type: ignore
-      url=url,
+      url=None,
       files=files,
       agent=agent,
       device=device,
@@ -226,7 +225,7 @@ class SmoothClient(BaseClient):
     # Auto-start proxy immediately if configured
     if self_proxy:
       try:
-        proxy_url = _get_proxy_url(handle.live_url(timeout=60))
+        proxy_url = _get_proxy_url(handle.live_url(timeout=120))
         handle._start_proxy(proxy_url, cast(str, proxy_password))
       except Exception as e:
         try:
@@ -620,7 +619,6 @@ class SmoothAsyncClient(BaseClient):
 
   def session(
     self,
-    url: str | None = None,
     files: list[str] | None = None,
     agent: str = "smooth",
     device: DeviceType = "desktop",
@@ -653,7 +651,7 @@ class SmoothAsyncClient(BaseClient):
             ...
     """
     return _AsyncSessionContextManager(self._session_coro(
-      url=url,
+      url=None,
       files=files,
       agent=agent,
       device=device,
@@ -743,7 +741,7 @@ class SmoothAsyncClient(BaseClient):
     # Auto-start proxy immediately if configured
     if self_proxy:
       try:
-        proxy_url = _get_proxy_url(await handle.live_url(timeout=60))
+        proxy_url = _get_proxy_url(await handle.live_url(timeout=120))
         handle._start_proxy(proxy_url, cast(str, proxy_password))
       except Exception as e:
         try:

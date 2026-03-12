@@ -65,7 +65,7 @@ export interface RunOptions {
   showCursor?: boolean;
 }
 
-export type SessionOptions = Omit<RunOptions, "task" | "responseModel">;
+export type SessionOptions = Omit<RunOptions, "task" | "responseModel" | "url">;
 
 function getProxyUrl(liveUrl: string): string {
   const parsed = new URL(liveUrl);
@@ -192,7 +192,7 @@ export class SmoothClient {
 
       Telemetry.get().record("sdk.session", {
         properties: {
-          url: opts.url,
+          url: null,
           device: opts.device ?? "desktop",
           profile_id: opts.profileId,
           stealth_mode: opts.stealthMode ?? false,

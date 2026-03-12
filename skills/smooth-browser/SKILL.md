@@ -48,12 +48,11 @@ smooth list-profiles
 ### 2. Start a Browser Session
 
 ```bash
-smooth start-session --profile-id "my-profile" --url "https://example.com"
+smooth start-session --profile-id "my-profile"
 ```
 
 **Options:**
 - `--profile-id` - Use a specific profile (optional, creates anonymous session if not provided)
-- `--url` - Initial URL to navigate to (optional)
 - `--files` - Comma-separated file IDs to make available in the session (optional)
 - `--device mobile|desktop` - Device type (default: mobile)
 - `--profile-read-only` - Load profile without saving changes
@@ -128,7 +127,10 @@ smooth close-session <session-id>
 smooth create-profile --profile-id "github-account"
 
 # Start session
-smooth start-session --profile-id "github-account" --url "https://github.com/login"
+smooth start-session --profile-id "github-account"
+
+# Load url
+smooth goto <session-id> "https://github.com/login"
 
 # Get live view to authenticate manually
 smooth live-view <session-id>
@@ -194,8 +196,9 @@ smooth run $SESSION_ID "Consider the product with name '$RESULT'. Now find 3 sim
 **Option 1: Using `run` with structured output:**
 
 ```bash
-smooth start-session --url "https://news.ycombinator.com"
+smooth start-session
 smooth run <session-id> "Extract the top 10 posts" \
+  --url "https://news.ycombinator.com" \
   --response-model '{
     "type": "object",
     "properties": {
@@ -260,10 +263,10 @@ Files must be uploaded before starting a session, then passed to the session via
 FILE_ID=$(smooth upload-file /path/to/document.pdf --purpose "Contract to analyze" --json | jq -r .file_id)
 
 # Step 2: Start session with the file
-smooth start-session --files "$FILE_ID" --url "https://example.com"
+smooth start-session --files "$FILE_ID"
 
 # Step 3: The agent can now access the file in tasks
-smooth run <session-id> "Analyze the contract document and extract key terms"
+smooth run <session-id> "Analyze the contract document and extract key terms" --url "https://example.com"
 ```
 
 **Upload multiple files:**
@@ -278,12 +281,12 @@ smooth start-session --files "$FILE_ID_1,$FILE_ID_2"
 
 **Download files from session:**
 ```bash
-smooth run <session-id> "Download the monthly report PDF" --url
+smooth run <session-id> "Download the monthly report PDF"
 smooth close-session <session-id>
 
 # After session closes, get download URL
 smooth downloads <session-id>
-# Visit the URL to download files
+# curl the URL to download files
 ```
 
 ---
@@ -311,7 +314,6 @@ smooth run <session-id> "Now navigate to the dashboard and export data"
 **Extract data from current page:**
 
 ```bash
-smooth start-session --url "https://example.com/products"
 smooth extract <session-id> \
   --schema '{"type":"object","properties":{"products":{"type":"array"}}}' \
   --prompt "Extract all product names and prices"

@@ -479,6 +479,30 @@ async def run_task(args: argparse.Namespace):
     print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
 
 
+async def goto(args: argparse.Namespace):
+  """Navigate to a URL in an existing browser session."""
+  try:
+    async with SmoothAsyncClient() as client:
+      if not args.json:
+        print(f"Navigating session '{args.session_id}' to: {args.url}")
+
+      session_handle = AsyncSessionHandle(args.session_id, client)
+      await session_handle.goto(url=args.url)
+
+      Telemetry.get().record("cli.goto")
+      if args.json:
+        print_success("Navigation successful", {"session_id": args.session_id, "url": args.url})
+      else:
+        print(f"Successfully navigated to: {args.url}")
+
+  except ApiError as e:
+    Telemetry.get().record("cli.goto", error=str(e.detail), error_type="ApiError")
+    print_error(f"Failed to navigate: {e.detail}", json_mode=args.json)
+  except Exception as e:
+    Telemetry.get().record("cli.goto", error=str(e), error_type=type(e).__name__)
+    print_error(f"Unexpected error: {str(e)}", json_mode=args.json)
+
+
 async def live_view(args: argparse.Namespace):
   """Get the live view URL for a session."""
   try:
@@ -760,6 +784,13 @@ def main():
   run_parser.add_argument("--max-steps", type=int, default=32, help="Maximum steps (default: 32)")
   run_parser.add_argument("--json", action="store_true", help="Output as JSON")
   run_parser.set_defaults(func=run_task)
+
+  # goto command
+  goto_parser = subparsers.add_parser("goto", help="Navigate to a URL in an existing browser session")
+  goto_parser.add_argument("session_id", help="Session ID to navigate")
+  goto_parser.add_argument("url", help="URL to navigate to")
+  goto_parser.add_argument("--json", action="store_true", help="Output as JSON")
+  goto_parser.set_defaults(func=goto)
 
   # live-view command
   live_parser = subparsers.add_parser("live-view", help="Get live view URL for a session")
