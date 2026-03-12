@@ -697,7 +697,7 @@ class SessionHandle(TaskHandleEx):
       metadata: Optional dictionary of variables or parameters passed to the agent.
       secrets: URL glob to name/secret mapping.
         Each key is a glob-style HTTPS URL pattern where the secret may be used, e.g. `https://example.com/*`.
-        Each value is a dictionary for use on that url only, e.g. `{"login_password": SecretStr("SecretValue123")}`.
+        Each value is a dictionary for use on that url only, e.g. `{"login_password": "SecretValue123"}`.
         The agent sees opaque references and the real values are only injected into browser actions on matching URLs.
     """
     return self._run_async(self._async_handle.run_task(task, max_steps, response_model, url, metadata, secrets))

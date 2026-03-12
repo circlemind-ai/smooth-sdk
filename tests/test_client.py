@@ -9,7 +9,13 @@ import pytest
 from aioresponses import aioresponses
 from pydantic import SecretStr
 
-from smooth._client import BaseClient, SmoothAsyncClient, SmoothClient, _dump_json_including_sensitive, _get_proxy_url
+from smooth._client import (
+  BaseClient,
+  SmoothAsyncClient,
+  SmoothClient,
+  _dump_json_including_sensitive,  # pyright: ignore[reportPrivateUsage]
+  _get_proxy_url,  # pyright: ignore[reportPrivateUsage]
+)
 from smooth._exceptions import ApiError
 from smooth.models import TaskEvent
 
