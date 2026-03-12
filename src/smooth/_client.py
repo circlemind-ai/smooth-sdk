@@ -42,7 +42,7 @@ from .models import (
 T = TypeVar("T")
 
 
-def _dump_json_with_secrets(model: BaseModel) -> str:
+def _dump_json_including_sensitive(model: BaseModel) -> str:
   """Serialize a Pydantic model to JSON, revealing SecretStr values."""
   return json.dumps(model.model_dump(), default=lambda v: v.get_secret_value() if isinstance(v, SecretStr) else v)
 
@@ -1105,7 +1105,7 @@ class SmoothAsyncClient(BaseClient):
       session = await self._ensure_session()
       async with session.post(
         f"{self.base_url}/task/{task_id}/event",
-        data=_dump_json_with_secrets(event),
+        data=_dump_json_including_sensitive(event),
         headers={"Content-Type": "application/json"},
       ) as response:
         data = await self._handle_response(response)

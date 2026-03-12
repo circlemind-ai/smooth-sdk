@@ -9,7 +9,7 @@ import pytest
 from aioresponses import aioresponses
 from pydantic import SecretStr
 
-from smooth._client import BaseClient, SmoothAsyncClient, SmoothClient, _dump_json_with_secrets, _get_proxy_url
+from smooth._client import BaseClient, SmoothAsyncClient, SmoothClient, _dump_json_including_sensitive, _get_proxy_url
 from smooth._exceptions import ApiError
 from smooth.models import TaskEvent
 
@@ -29,14 +29,14 @@ class TestDumpJson:
         "secrets": {"https://example.com/*": {"password": SecretStr("SuperSecret123")}},
       },
     )
-    result = json.loads(_dump_json_with_secrets(event))
+    result = json.loads(_dump_json_including_sensitive(event))
     assert result["payload"]["secrets"]["https://example.com/*"]["password"] == "SuperSecret123"
 
   def test_plain_strings_unchanged(self):
     """Plain string values pass through normally."""
 
     event = TaskEvent(name="test", payload={"key": "value"})
-    result = json.loads(_dump_json_with_secrets(event))
+    result = json.loads(_dump_json_including_sensitive(event))
     assert result["payload"]["key"] == "value"
 
 

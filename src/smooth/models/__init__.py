@@ -2,9 +2,12 @@
 """Smooth python SDK types and models."""
 
 import warnings
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, computed_field, model_validator
+
+# When using this, ensure over-the-wire serialization happens using _dump_json_including_sensitive
+SensitiveStr = Annotated[SecretStr | str, Field(json_schema_extra={"sensitive": True})]
 
 # --- Models ---
 
@@ -20,8 +23,12 @@ class Certificate(BaseModel):
       password: Password to decrypt the certificate file. Optional.
   """
 
-  file: str | Any = Field(description="p12 file object to be uploaded (e.g., open('cert.p12', 'rb')).")
-  password: str | None = Field(default=None, description="Password to decrypt the certificate file. Optional.")
+  file: str | Any = Field(
+    description="p12 file object to be uploaded (e.g., open('cert.p12', 'rb')).", json_schema_extra={"sensitive": True}
+  )
+  password: str | None = Field(
+    default=None, description="Password to decrypt the certificate file. Optional.", json_schema_extra={"sensitive": True}
+  )
   filters: list[list[str]] | None = Field(
     default=None,
     description="Reserved for future use to specify URL patterns where the certificate should be applied. Optional.",
@@ -47,7 +54,7 @@ class RunTaskInput(BaseModel):
   )
   url: str | None = Field(default=None, description="Starting URL for the task.")
   metadata: dict[str, Any] | None = Field(default=None, description="Variables or parameters passed to the agent.")
-  secrets: dict[str, dict[str, SecretStr | str]] | None = Field(
+  secrets: dict[str, dict[str, SensitiveStr]] | None = Field(
     default=None, description="URL glob to name/secret mapping."
   )
 
@@ -130,7 +137,7 @@ class TaskRequest(BaseModel):
     description=("Proxy server url to route browser traffic through."),
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
-  proxy_password: str | None = Field(default=None, description="Proxy server password.")
+  proxy_password: str | None = Field(default=None, description="Proxy server password.", json_schema_extra={"sensitive": True})
   certificates: list[Certificate] | None = Field(
     default=None,
     description=(
@@ -371,7 +378,7 @@ class BrowserSessionRequest(BaseModel):
     description=("Proxy server address to route browser traffic through."),
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
-  proxy_password: str | None = Field(default=None, description="Proxy server password.")
+  proxy_password: str | None = Field(default=None, description="Proxy server password.", json_schema_extra={"sensitive": True})
   extensions: list[str] | None = Field(default=None, description="List of extensions to install for the task.")
 
   @model_validator(mode="before")
