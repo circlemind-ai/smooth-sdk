@@ -58,6 +58,15 @@ class RunTaskInput(BaseModel):
     default=None, description="URL glob to name/secret mapping."
   )
 
+  @model_validator(mode="after")
+  def _validate_secret_names(self) -> "RunTaskInput":
+    if self.secrets:
+      for url_glob, name_map in self.secrets.items():
+        for name in name_map:
+          if not name.isidentifier():
+            raise ValueError(f"Secret name {name!r} (under {url_glob!r}) must be a valid Python identifier")
+    return self
+
 
 class SessionActionPayload(BaseModel):
   """Payload for a session action event."""
