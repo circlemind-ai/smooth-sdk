@@ -182,7 +182,7 @@ export class SmoothClient {
 
       if (selfProxy) {
         try {
-          const url = await handle.liveUrl({ timeout: 30 });
+          const url = await handle.liveUrl({ timeout: 120 });
           const proxyUrl = getProxyUrl(url);
           handle._startProxy(proxyUrl, proxyPassword!);
         } catch (e) {
