@@ -19,6 +19,8 @@ from .models import (
   ActionGotoResponse,
   ActionRunTaskResponse,
   BrowserSessionResponse,
+  RunTaskInput,
+  SessionActionPayload,
   TaskEvent,
   TaskResponse,
   TaskUpdateRequest,
@@ -531,17 +533,17 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
       response_model = response_model.model_json_schema()
     event = TaskEvent(
       name="session_action",
-      payload={
-        "name": "run_task",
-        "input": {
-          "task": task,
-          "max_steps": max_steps,
-          "response_model": response_model,
-          "url": url,
-          "metadata": metadata,
-          "secrets": secrets,
-        },
-      },
+      payload=SessionActionPayload(
+        name="run_task",
+        input=RunTaskInput(
+          task=task,
+          max_steps=max_steps,
+          response_model=response_model,
+          url=url,
+          metadata=metadata,
+          secrets=secrets,
+        ),
+      ),
     )
     return ActionRunTaskResponse(**(await self._send_event(event, has_result=True) or {}))  # type: ignore
 

@@ -4,7 +4,7 @@
 import warnings
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, computed_field, model_validator
 
 # --- Models ---
 
@@ -37,11 +37,33 @@ class ToolSignature(BaseModel):
   output: str = Field(description="The output produced by the tool.")
 
 
+class RunTaskInput(BaseModel):
+  """Input parameters for a run_task session action."""
+
+  task: str = Field(description="The task description for the agent to execute.")
+  max_steps: int = Field(default=32, description="Maximum number of steps the agent can take.")
+  response_model: dict[str, Any] | None = Field(
+    default=None, description="JSON schema describing the desired output structure."
+  )
+  url: str | None = Field(default=None, description="Starting URL for the task.")
+  metadata: dict[str, Any] | None = Field(default=None, description="Variables or parameters passed to the agent.")
+  secrets: dict[str, dict[str, SecretStr | str]] | None = Field(
+    default=None, description="URL glob to name/secret mapping."
+  )
+
+
+class SessionActionPayload(BaseModel):
+  """Payload for a session action event."""
+
+  name: str = Field(description="The name of the action.")
+  input: RunTaskInput | dict[str, Any] = Field(description="The input for the action.")
+
+
 class TaskEvent(BaseModel):
   """Task event model."""
 
   name: str = Field(description="The name of the event.")
-  payload: dict[str, Any] = Field(description="The payload of the event.")
+  payload: SessionActionPayload | dict[str, Any] = Field(description="The payload of the event.")
   id: str | None = Field(default=None, description="The ID of the event.")
   timestamp: int | None = Field(default=None, description="The timestamp of the event.")
 
