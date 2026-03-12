@@ -512,7 +512,7 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
 
   async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any):
     """Exits the context manager."""
-    asyncio.create_task(self.close(force=True))
+    await self.close(force=True)
 
   # --- Session Methods ---
 
