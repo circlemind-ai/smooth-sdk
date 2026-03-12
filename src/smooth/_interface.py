@@ -81,12 +81,6 @@ class AsyncTaskHandle(BaseTaskHandle):
 
   async def result(self, timeout: int | None = None, poll_interval: float | None = None):
     """Waits for the task to complete and returns the result."""
-    if self._task_response and self._task_response.status not in [
-      "running",
-      "waiting",
-    ]:
-      return self._task_response
-
     if timeout is not None and timeout < 1:
       raise ValueError("Timeout must be at least 1 second.")
 
@@ -593,8 +587,6 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
 
   async def result(self, timeout: int | None = None, poll_interval: float | None = None):
     """Waits for the session to close and returns the result."""
-    if self._task_response and self._task_response.status not in ["running", "waiting"]:
-      return self._task_response
     if not self._closed:
       raise BadRequestError(
         "result() cannot be called on an open session. "
