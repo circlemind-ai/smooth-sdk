@@ -108,7 +108,7 @@ class AsyncTaskHandle(BaseTaskHandle):
     if self._task_response and self._task_response.status not in ["waiting", "running"]:
       raise BadRequestError(f"Live URL not available for task {self.id()} as it is {self._task_response.status}.")
 
-    if self._task_response and self._task_response.live_url:
+    if self._task_response and self._task_response.live_url is not None:
       return encode_url(self._task_response.live_url, interactive=interactive, embed=embed)
 
     loop = asyncio.get_running_loop()

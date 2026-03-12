@@ -229,6 +229,10 @@ class SmoothClient(BaseClient):
         proxy_url = _get_proxy_url(handle.live_url(timeout=60))
         handle._start_proxy(proxy_url, cast(str, proxy_password))
       except Exception as e:
+        try:
+          handle.close(force=True)
+        except Exception:
+          pass
         raise RuntimeError("Failed to start self-proxy.") from e
 
     return handle
@@ -742,6 +746,10 @@ class SmoothAsyncClient(BaseClient):
         proxy_url = _get_proxy_url(await handle.live_url(timeout=60))
         handle._start_proxy(proxy_url, cast(str, proxy_password))
       except Exception as e:
+        try:
+          await handle.close(force=True)
+        except Exception:
+          pass
         raise RuntimeError("Failed to start self-proxy.") from e
 
     return handle
