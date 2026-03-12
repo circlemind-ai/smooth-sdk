@@ -2,6 +2,7 @@
 import asyncio
 import inspect
 import io
+import json
 import os
 import secrets
 import threading
@@ -11,7 +12,7 @@ from typing import Any, Callable, Coroutine, Literal, Sequence, Type, TypedDict,
 import aiohttp
 from aiohttp_retry import ExponentialRetry, RetryClient
 from deprecated import deprecated
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from smooth._interface import AsyncSessionHandle, AsyncTaskHandle, BrowserSessionHandle, SessionHandle, TaskHandle
 
@@ -39,6 +40,11 @@ from .models import (
 )
 
 T = TypeVar("T")
+
+
+def _dump_json_with_secrets(model: BaseModel) -> str:
+  """Serialize a Pydantic model to JSON, revealing SecretStr values."""
+  return json.dumps(model.model_dump(), default=lambda v: v.get_secret_value() if isinstance(v, SecretStr) else v)
 
 
 class ProxyConfig(TypedDict):
@@ -1099,7 +1105,8 @@ class SmoothAsyncClient(BaseClient):
       session = await self._ensure_session()
       async with session.post(
         f"{self.base_url}/task/{task_id}/event",
-        json=event.model_dump(),
+        data=_dump_json_with_secrets(event),
+        headers={"Content-Type": "application/json"},
       ) as response:
         data = await self._handle_response(response)
         return TaskEventResponse(**data["r"])

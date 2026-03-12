@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Coroutine, Sequence, Type, TypeVar
 
 from deprecated import deprecated
 from nanoid import generate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
 from ._exceptions import ApiError, BadRequestError, ToolCallError
 from ._proxy import FRPProxy, ProxyConfig
@@ -512,8 +512,21 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, Any] | None = None,
+    secrets: dict[str, dict[str, SecretStr | str]] | None = None,
   ):
-    """Extracts from the given URL."""
+    """Runs a task within the current browser session.
+
+    Args:
+      task: The task description for the agent to execute.
+      max_steps: Maximum number of steps the agent can take.
+      response_model: Optional JSON schema or Pydantic model describing the desired output structure.
+      url: Optional starting URL for the task.
+      metadata: Optional dictionary of variables or parameters passed to the agent.
+      secrets: URL glob to name/secret mapping.
+        Each key is a glob-style HTTPS URL pattern where the secret may be used, e.g. `https://example.com/*`.
+        Each value is a dictionary for use on that url only, e.g. `{"login_password": SecretStr("SecretValue123")}`.
+        The agent sees opaque references and the real values are only injected into browser actions on matching URLs.
+    """
     if response_model is not None and not isinstance(response_model, dict):
       response_model = response_model.model_json_schema()
     event = TaskEvent(
@@ -526,6 +539,7 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
           "response_model": response_model,
           "url": url,
           "metadata": metadata,
+          "secrets": secrets,
         },
       },
     )
@@ -669,9 +683,22 @@ class SessionHandle(TaskHandleEx):
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, Any] | None = None,
+    secrets: dict[str, dict[str, SecretStr]] | None = None,
   ):
-    """Extracts from the given URL."""
-    return self._run_async(self._async_handle.run_task(task, max_steps, response_model, url, metadata))
+    """Runs a task within the current browser session.
+
+    Args:
+      task: The task description for the agent to execute.
+      max_steps: Maximum number of steps the agent can take.
+      response_model: Optional JSON schema or Pydantic model describing the desired output structure.
+      url: Optional starting URL for the task.
+      metadata: Optional dictionary of variables or parameters passed to the agent.
+      secrets: URL glob to name/secret mapping.
+        Each key is a glob-style HTTPS URL pattern where the secret may be used, e.g. `https://example.com/*`.
+        Each value is a dictionary for use on that url only, e.g. `{"login_password": SecretStr("SecretValue123")}`.
+        The agent sees opaque references and the real values are only injected into browser actions on matching URLs.
+    """
+    return self._run_async(self._async_handle.run_task(task, max_steps, response_model, url, metadata, secrets))
 
   def result(self, timeout: int | None = None, poll_interval: float | None = None) -> "TaskResponse":
     """Waits for the session to close and returns the result."""

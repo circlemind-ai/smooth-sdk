@@ -285,6 +285,26 @@ class TestAsyncSessionHandle:
     with pytest.raises(BadRequestError, match="result\\(\\) cannot be called on an open session"):
       await handle.result()
 
+  async def test_run_task_passes_secret_str_through(self):
+    """SecretStr values passed to run_task must be kept as SecretStr in the event payload
+    so that _dump_json can reveal them at the serialization boundary."""
+    from pydantic import SecretStr
+
+    handle = self._make_handle()
+
+    with patch.object(
+      handle, "_send_event", return_value={"status": "running", "credits_used": 0, "duration": 0, "output": None}
+    ) as mock_send:
+      await handle.run_task(
+        task="login",
+        secrets={"https://example.com/*": {"password": SecretStr("SuperSecret123")}},
+      )
+
+      event = mock_send.call_args[0][0]
+      sent_secret = event.payload["input"]["secrets"]["https://example.com/*"]["password"]
+      assert isinstance(sent_secret, SecretStr), f"Expected SecretStr, got: {type(sent_secret)}"
+      assert sent_secret.get_secret_value() == "SuperSecret123"
+
 
 # --- SessionHandle (sync) ---
 

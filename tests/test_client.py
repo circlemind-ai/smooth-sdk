@@ -1,16 +1,43 @@
 """Tests for smooth._client."""
 
+import json
 import os
 from unittest.mock import AsyncMock, patch
 
 import aiohttp
 import pytest
 from aioresponses import aioresponses
+from pydantic import SecretStr
 
-from smooth._client import BaseClient, SmoothAsyncClient, SmoothClient, _get_proxy_url
+from smooth._client import BaseClient, SmoothAsyncClient, SmoothClient, _dump_json_with_secrets, _get_proxy_url
 from smooth._exceptions import ApiError
+from smooth.models import TaskEvent
 
 FAKE_KEY = "cmzr-test-key-0123456789abcdef"
+
+
+# --- _dump_json ---
+
+
+class TestDumpJson:
+  def test_secret_str_revealed(self):
+    """SecretStr values in event payload must be serialized as their actual secret value."""
+
+    event = TaskEvent(
+      name="session_action",
+      payload={
+        "secrets": {"https://example.com/*": {"password": SecretStr("SuperSecret123")}},
+      },
+    )
+    result = json.loads(_dump_json_with_secrets(event))
+    assert result["payload"]["secrets"]["https://example.com/*"]["password"] == "SuperSecret123"
+
+  def test_plain_strings_unchanged(self):
+    """Plain string values pass through normally."""
+
+    event = TaskEvent(name="test", payload={"key": "value"})
+    result = json.loads(_dump_json_with_secrets(event))
+    assert result["payload"]["key"] == "value"
 
 
 # --- _get_proxy_url ---
