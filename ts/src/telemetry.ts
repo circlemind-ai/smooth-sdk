@@ -1,13 +1,11 @@
 import os from "node:os";
-import { SDK_VERSION } from "./config.js";
+import { BASE_URL, SDK_VERSION } from "./config.js";
 
 const _ENABLED = (process.env.SMOOTH_TELEMETRY ?? "").toLowerCase() !== "off";
 const _FLUSH_INTERVAL = 5_000;
 const _FLUSH_THRESHOLD = 10;
 const _MAX_QUEUE_SIZE = 200;
-const _TELEMETRY_URL =
-  process.env.SMOOTH_TELEMETRY_URL ??
-  "https://api.smooth.sh/api/v1/telemetry";
+const _DEFAULT_TELEMETRY_URL = `${BASE_URL.replace(/\/+$/, "")}/v1/telemetry`;
 
 function _baseProperties(): Record<string, string> {
   return {
@@ -43,6 +41,7 @@ export interface TelemetryBackend {
   sendBatch(
     events: Array<Record<string, unknown>>,
     apiKey: string,
+    url: string,
   ): Promise<void>;
   shutdown(): Promise<void>;
 }
@@ -51,9 +50,10 @@ class HttpBackend implements TelemetryBackend {
   async sendBatch(
     events: Array<Record<string, unknown>>,
     apiKey: string,
+    url: string,
   ): Promise<void> {
     try {
-      await fetch(_TELEMETRY_URL, {
+      await fetch(url, {
         method: "POST",
         headers: {
           apikey: apiKey,
@@ -71,7 +71,11 @@ class HttpBackend implements TelemetryBackend {
 }
 
 class NoopBackend implements TelemetryBackend {
-  async sendBatch(): Promise<void> {}
+  async sendBatch(
+    _events: Array<Record<string, unknown>>,
+    _apiKey: string,
+    _url: string,
+  ): Promise<void> {}
   async shutdown(): Promise<void> {}
 }
 
@@ -81,6 +85,7 @@ export class Telemetry {
   private _backend: TelemetryBackend;
   private _queue: Array<Record<string, unknown>> = [];
   private _apiKey = "";
+  private _telemetryUrl = _DEFAULT_TELEMETRY_URL;
   private _timer: ReturnType<typeof setInterval> | null = null;
   private _started = false;
 
@@ -113,9 +118,12 @@ export class Telemetry {
     return _ENABLED;
   }
 
-  init(apiKey: string): void {
+  init(apiKey: string, baseUrl?: string): void {
     if (!_ENABLED) return;
     this._apiKey = apiKey;
+    if (baseUrl) {
+      this._telemetryUrl = `${baseUrl.replace(/\/+$/, "")}/telemetry`;
+    }
     if (!this._started) {
       this._startFlushLoop();
     }
@@ -180,7 +188,7 @@ export class Telemetry {
       batch.push(this._queue.shift()!);
     }
     if (batch.length > 0) {
-      await this._backend.sendBatch(batch, this._apiKey);
+      await this._backend.sendBatch(batch, this._apiKey, this._telemetryUrl);
     }
   }
 

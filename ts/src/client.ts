@@ -112,7 +112,7 @@ export class SmoothClient {
     this._retries = options?.retries ?? 3;
     this._fetch = options?._fetch ?? globalThis.fetch;
 
-    Telemetry.get().init(this.apiKey);
+    Telemetry.get().init(this.apiKey, this.baseUrl);
   }
 
   // --- Task / Session ---

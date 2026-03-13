@@ -64,7 +64,7 @@ class RecordingBackend(TelemetryBackend):
   def __init__(self):
     self.batches = []
 
-  async def send_batch(self, events, api_key):
+  async def send_batch(self, events, api_key, url):
     self.batches.append((list(events), api_key))
 
   async def shutdown(self):
@@ -172,6 +172,67 @@ class TestTelemetryDisabled:
 
     t = Telemetry()
     assert isinstance(t._backend, NoopBackend)
+
+
+class TestTelemetryUrl:
+  def test_default_telemetry_url(self):
+    t = Telemetry()
+    assert t._telemetry_url.endswith("/v1/telemetry")
+
+  def test_init_sets_telemetry_url_from_base_url(self, monkeypatch):
+    import smooth._telemetry as tel_mod
+
+    monkeypatch.setattr(tel_mod, "_ENABLED", True)
+
+    t = Telemetry()
+    t.init("key", base_url="https://staging.example.com/api/v1")
+    assert t._telemetry_url == "https://staging.example.com/api/v1/telemetry"
+
+  def test_init_strips_trailing_slash(self, monkeypatch):
+    import smooth._telemetry as tel_mod
+
+    monkeypatch.setattr(tel_mod, "_ENABLED", True)
+
+    t = Telemetry()
+    t.init("key", base_url="https://staging.example.com/api/v1/")
+    assert t._telemetry_url == "https://staging.example.com/api/v1/telemetry"
+
+  def test_init_without_base_url_keeps_default(self, monkeypatch):
+    import smooth._telemetry as tel_mod
+
+    monkeypatch.setattr(tel_mod, "_ENABLED", True)
+
+    t = Telemetry()
+    default_url = t._telemetry_url
+    t.init("key")
+    assert t._telemetry_url == default_url
+
+  def test_flush_passes_url_to_backend(self, monkeypatch):
+    import smooth._telemetry as tel_mod
+
+    monkeypatch.setattr(tel_mod, "_ENABLED", True)
+
+    t = Telemetry()
+    backend = RecordingBackendWithUrl()
+    t._backend = backend
+    t.init("key", base_url="https://custom.example.com/api/v1")
+    t._queue.append(_make_event("test"))
+
+    import asyncio
+
+    asyncio.get_event_loop().run_until_complete(t._flush())
+    assert backend.urls[0] == "https://custom.example.com/api/v1/telemetry"
+
+
+class RecordingBackendWithUrl(TelemetryBackend):
+  def __init__(self):
+    self.urls = []
+
+  async def send_batch(self, events, api_key, url):
+    self.urls.append(url)
+
+  async def shutdown(self):
+    pass
 
 
 class TestTelemetrySingleton:

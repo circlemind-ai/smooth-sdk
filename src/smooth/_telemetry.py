@@ -20,7 +20,7 @@ from typing import Any, Callable, Sequence
 
 import aiohttp
 
-from ._config import SDK_VERSION
+from ._config import BASE_URL, SDK_VERSION
 
 # --- Opt-out ---
 
@@ -31,7 +31,7 @@ _ENABLED = os.getenv("SMOOTH_TELEMETRY", "").lower() != "off"
 _FLUSH_INTERVAL = 5.0
 _FLUSH_THRESHOLD = 10
 _MAX_QUEUE_SIZE = 200
-_TELEMETRY_URL = os.getenv("SMOOTH_TELEMETRY_URL", "https://api.smooth.sh/api/v1/telemetry")
+_DEFAULT_TELEMETRY_URL = f"{BASE_URL.rstrip('/')}/v1/telemetry"
 
 
 # --- Event helpers ---
@@ -76,7 +76,7 @@ def _make_event(
 
 class TelemetryBackend(ABC):
   @abstractmethod
-  async def send_batch(self, events: Sequence[dict[str, Any]], api_key: str) -> None: ...
+  async def send_batch(self, events: Sequence[dict[str, Any]], api_key: str, url: str) -> None: ...
 
   @abstractmethod
   async def shutdown(self) -> None: ...
@@ -93,11 +93,11 @@ class HttpBackend(TelemetryBackend):
       )
     return self._session
 
-  async def send_batch(self, events: Sequence[dict[str, Any]], api_key: str) -> None:
+  async def send_batch(self, events: Sequence[dict[str, Any]], api_key: str, url: str) -> None:
     try:
       session = await self._ensure_session()
       async with session.post(
-        _TELEMETRY_URL,
+        url,
         json={"events": list(events)},
         headers={"apikey": api_key, "Content-Type": "application/json"},
       ):
@@ -111,7 +111,7 @@ class HttpBackend(TelemetryBackend):
 
 
 class NoopBackend(TelemetryBackend):
-  async def send_batch(self, events: Sequence[dict[str, Any]], api_key: str) -> None:
+  async def send_batch(self, events: Sequence[dict[str, Any]], api_key: str, url: str) -> None:
     pass
 
   async def shutdown(self) -> None:
@@ -129,6 +129,7 @@ class Telemetry:
     self._backend: TelemetryBackend = HttpBackend() if _ENABLED else NoopBackend()
     self._queue: deque[dict[str, Any]] = deque(maxlen=_MAX_QUEUE_SIZE)
     self._api_key: str = ""
+    self._telemetry_url: str = _DEFAULT_TELEMETRY_URL
     self._loop: asyncio.AbstractEventLoop | None = None
     self._thread: threading.Thread | None = None
     self._started = False
@@ -144,11 +145,13 @@ class Telemetry:
           cls._instance = cls()
     return cls._instance
 
-  def init(self, api_key: str) -> None:
+  def init(self, api_key: str, base_url: str | None = None) -> None:
     """Set the API key and start the background flush loop."""
     if not _ENABLED:
       return
     self._api_key = api_key
+    if base_url is not None:
+      self._telemetry_url = f"{base_url.rstrip('/')}/telemetry"
     if not self._started:
       self._start_background_loop()
 
@@ -199,7 +202,7 @@ class Telemetry:
     while self._queue and len(batch) < _FLUSH_THRESHOLD:
       batch.append(self._queue.popleft())
     if batch:
-      await self._backend.send_batch(batch, self._api_key)
+      await self._backend.send_batch(batch, self._api_key, self._telemetry_url)
 
   def _shutdown_sync(self) -> None:
     if not _ENABLED or not self._loop:

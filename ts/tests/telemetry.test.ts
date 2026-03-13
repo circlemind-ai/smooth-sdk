@@ -7,6 +7,7 @@ class MockBackend implements TelemetryBackend {
   async sendBatch(
     events: Array<Record<string, unknown>>,
     apiKey: string,
+    _url: string,
   ): Promise<void> {
     this.batches.push({ events: [...events], apiKey });
   }
@@ -154,6 +155,36 @@ describe("Telemetry", () => {
       expect(backend.batches[0].events).toHaveLength(10);
       expect(t["_queue"]).toHaveLength(15);
     });
+  });
+});
+
+describe("telemetry URL", () => {
+  it("defaults to base URL derived telemetry endpoint", () => {
+    const t = Telemetry.get();
+    expect(t["_telemetryUrl"]).toMatch(/\/v1\/telemetry$/);
+  });
+
+  it("sets telemetry URL from base_url passed to init", () => {
+    const t = Telemetry.get();
+    t.init("key", "https://staging.example.com/api/v1");
+    expect(t["_telemetryUrl"]).toBe(
+      "https://staging.example.com/api/v1/telemetry",
+    );
+  });
+
+  it("strips trailing slash from base_url", () => {
+    const t = Telemetry.get();
+    t.init("key", "https://staging.example.com/api/v1/");
+    expect(t["_telemetryUrl"]).toBe(
+      "https://staging.example.com/api/v1/telemetry",
+    );
+  });
+
+  it("keeps default URL when base_url is not provided", () => {
+    const t = Telemetry.get();
+    const defaultUrl = t["_telemetryUrl"];
+    t.init("key");
+    expect(t["_telemetryUrl"]).toBe(defaultUrl);
   });
 });
 

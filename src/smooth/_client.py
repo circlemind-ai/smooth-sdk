@@ -97,7 +97,7 @@ class BaseClient:
       "User-Agent": f"smooth-python-sdk/{SDK_VERSION}",
     }
 
-    Telemetry.get().init(self.api_key)
+    Telemetry.get().init(self.api_key, base_url=self.base_url)
 
   async def _handle_response(self, response: aiohttp.ClientResponse) -> dict[str, Any]:
     """Handles HTTP responses and raises exceptions for errors."""
