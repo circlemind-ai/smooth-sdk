@@ -201,6 +201,88 @@ class TestAsyncTaskHandle:
     handle._disconnect(force=True)
     assert handle._task_response.status == "cancelled"
 
+  # --- Poller event processing ---
+
+  async def test_poller_dispatches_tool_call(self):
+    """Poller must handle tool_call events whose payload has name+input keys
+    (matching SessionActionPayload schema) without AttributeError."""
+    client = self._make_client()
+    call_count = 0
+    tool_called_with = {}
+
+    async def mock_tool(task_handle, event_id, **kwargs):
+      tool_called_with.update(kwargs)
+
+    tool = AsyncMock(side_effect=mock_tool)
+    tool.name = "my_tool"
+
+    handle = AsyncTaskHandle("t-1", client, tools=[tool])
+    handle._poll_interval = 0.05
+
+    async def mock_get_task(task_id, query_params=None):
+      nonlocal call_count
+      call_count += 1
+      if call_count == 1:
+        return TaskResponse(id="t-1", status="running")
+      if call_count == 2:
+        return TaskResponse(
+          id="t-1",
+          status="running",
+          events=[
+            TaskEvent(
+              name="tool_call",
+              payload={"name": "my_tool", "input": {"x": 42}},
+              id="ev-1",
+              timestamp=1,
+            )
+          ],
+        )
+      return TaskResponse(id="t-1", status="done", output="ok")
+
+    client._get_task = mock_get_task
+    result = await handle.result(timeout=5)
+    assert result.status == "done"
+    tool.assert_called_once()
+    assert tool_called_with == {"x": 42}
+
+  async def test_poller_resolves_browser_action_future(self):
+    """Poller must resolve futures for browser_action response events."""
+    client = self._make_client()
+    call_count = 0
+
+    handle = AsyncTaskHandle("t-1", client)
+    handle._poll_interval = 0.05
+
+    future = asyncio.get_running_loop().create_future()
+    handle._event_futures["ev-1"] = future
+
+    async def mock_get_task(task_id, query_params=None):
+      nonlocal call_count
+      call_count += 1
+      if call_count <= 1:
+        return TaskResponse(id="t-1", status="running")
+      if call_count == 2:
+        return TaskResponse(
+          id="t-1",
+          status="running",
+          events=[
+            TaskEvent(
+              name="browser_action",
+              payload={"code": 200, "output": "action result"},
+              id="ev-1",
+              timestamp=1,
+            )
+          ],
+        )
+      return TaskResponse(id="t-1", status="done")
+
+    client._get_task = mock_get_task
+
+    async with handle._connection():
+      result = await asyncio.wait_for(future, timeout=5)
+
+    assert result == "action result"
+
 
 # --- AsyncTaskHandleEx ---
 
@@ -301,7 +383,7 @@ class TestAsyncSessionHandle:
       )
 
       event = mock_send.call_args[0][0]
-      sent_secret = event.payload["input"]["secrets"]["https://example.com/*"]["password"]
+      sent_secret = event.payload.input.secrets["https://example.com/*"]["password"]
       assert isinstance(sent_secret, SecretStr), f"Expected SecretStr, got: {type(sent_secret)}"
       assert sent_secret.get_secret_value() == "SuperSecret123"
 

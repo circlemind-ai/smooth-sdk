@@ -79,7 +79,7 @@ class TaskEvent(BaseModel):
   """Task event model."""
 
   name: str = Field(description="The name of the event.")
-  payload: SessionActionPayload | dict[str, Any] = Field(description="The payload of the event.")
+  payload: dict[str, Any] | SessionActionPayload = Field(description="The payload of the event.")
   id: str | None = Field(default=None, description="The ID of the event.")
   timestamp: int | None = Field(default=None, description="The timestamp of the event.")
 

@@ -99,6 +99,33 @@ class TestTaskResponse:
     assert resp.device == "mobile"
 
 
+# --- TaskEvent payload union ---
+
+
+class TestTaskEventPayload:
+  def test_dict_payload_with_name_and_input_stays_dict(self):
+    """A dict payload matching SessionActionPayload's schema must remain a dict,
+    not be coerced to SessionActionPayload. The poller relies on .get() access."""
+    event = TaskEvent(
+      name="tool_call",
+      payload={"name": "my_tool", "input": {"x": 1}},
+      id="ev-1",
+      timestamp=1,
+    )
+    assert isinstance(event.payload, dict)
+    assert event.payload.get("name") == "my_tool"
+
+  def test_dict_payload_with_code_and_output_stays_dict(self):
+    event = TaskEvent(
+      name="browser_action",
+      payload={"code": 200, "output": "result"},
+      id="ev-2",
+      timestamp=2,
+    )
+    assert isinstance(event.payload, dict)
+    assert event.payload.get("code") == 200
+
+
 # --- Deprecated field migration ---
 
 
