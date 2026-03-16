@@ -20,7 +20,6 @@ from .models import (
   ActionRunTaskResponse,
   BrowserSessionResponse,
   RunTaskInput,
-  SessionActionPayload,
   TaskEvent,
   TaskResponse,
   TaskUpdateRequest,
@@ -266,22 +265,21 @@ class AsyncTaskHandle(BaseTaskHandle):
               for event in task_response.events:
                 if not event.id:
                   continue
-                payload = event.payload if isinstance(event.payload, dict) else event.payload.model_dump()
-                if event.name == "tool_call" and (tool := self._tools.get(payload.get("name", ""))) is not None:
+                if event.name == "tool_call" and (tool := self._tools.get(event.payload.get("name", ""))) is not None:
                   self._tool_tasks[event.id] = asyncio.create_task(
-                    _run_tool(tool(self._task_handle, event.id, **payload.get("input", {})), event.id)
+                    _run_tool(tool(self._task_handle, event.id, **event.payload.get("input", {})), event.id)
                   )
                 elif event.name in ["browser_action", "session_action"]:
                   future = self._event_futures.get(event.id)
                   if future and not future.done():
                     self._event_futures.pop(event.id, None)
-                    code = payload.get("code")
+                    code = event.payload.get("code")
                     if code == 200:
-                      future.set_result(payload.get("output"))
+                      future.set_result(event.payload.get("output"))
                     elif code == 400:
-                      future.set_exception(ToolCallError(payload.get("output", "Unknown error.")))
+                      future.set_exception(ToolCallError(event.payload.get("output", "Unknown error.")))
                     elif code == 500:
-                      future.set_exception(RuntimeError(payload.get("output", "Unknown error.")))
+                      future.set_exception(RuntimeError(event.payload.get("output", "Unknown error.")))
 
             for task in self._tool_tasks.values():
               if task.done():
@@ -534,9 +532,9 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
       response_model = response_model.model_json_schema()
     event = TaskEvent(
       name="session_action",
-      payload=SessionActionPayload(
-        name="run_task",
-        input=RunTaskInput(
+      payload={
+        "name": "run_task",
+        "input": RunTaskInput(
           task=task,
           max_steps=max_steps,
           response_model=response_model,
@@ -544,7 +542,7 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
           metadata=metadata,
           secrets=secrets,
         ),
-      ),
+      },
     )
     return ActionRunTaskResponse(**(await self._send_event(event, has_result=True) or {}))  # type: ignore
 

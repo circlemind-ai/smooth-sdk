@@ -104,8 +104,7 @@ class TestTaskResponse:
 
 class TestTaskEventPayload:
   def test_dict_payload_with_name_and_input_stays_dict(self):
-    """A dict payload matching SessionActionPayload's schema must remain a dict,
-    not be coerced to SessionActionPayload. The poller relies on .get() access."""
+    """A dict payload with name+input keys must remain a dict for .get() access."""
     event = TaskEvent(
       name="tool_call",
       payload={"name": "my_tool", "input": {"x": 1}},

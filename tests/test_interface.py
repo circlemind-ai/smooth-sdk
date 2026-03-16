@@ -204,8 +204,7 @@ class TestAsyncTaskHandle:
   # --- Poller event processing ---
 
   async def test_poller_dispatches_tool_call(self):
-    """Poller must handle tool_call events whose payload has name+input keys
-    (matching SessionActionPayload schema) without AttributeError."""
+    """Poller must handle tool_call events with name+input payload keys."""
     client = self._make_client()
     call_count = 0
     tool_called_with = {}
@@ -383,7 +382,7 @@ class TestAsyncSessionHandle:
       )
 
       event = mock_send.call_args[0][0]
-      sent_secret = event.payload.input.secrets["https://example.com/*"]["password"]
+      sent_secret = event.payload["input"].secrets["https://example.com/*"]["password"]
       assert isinstance(sent_secret, SecretStr), f"Expected SecretStr, got: {type(sent_secret)}"
       assert sent_secret.get_secret_value() == "SuperSecret123"
 
