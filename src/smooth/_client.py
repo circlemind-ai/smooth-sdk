@@ -278,8 +278,9 @@ class SmoothClient(BaseClient):
         agent: The agent to use for the task.
         max_steps: Maximum number of steps the agent can take (max 64).
         device: Device type for the task. Default is desktop.
-        allowed_urls: List of allowed URL patterns using wildcard syntax (e.g., https://*example.com/*).
+        allowed_urls: List of allowed URL patterns using glob syntax on the domain and path
           If None, all URLs are allowed.
+          e.g., to match everything on example.com, use `https://**.example.com/**`
         enable_recording: Enable video recording of the task execution.
         session_id: (Deprecated, now `profile_id`) Browser session ID to use.
         profile_id: Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials.
