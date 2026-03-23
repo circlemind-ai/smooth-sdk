@@ -866,7 +866,7 @@ class SmoothAsyncClient(BaseClient):
       stealth_mode=stealth_mode,
       proxy_server=proxy_server,
       proxy_username=proxy_username,
-      proxy_password=proxy_password,
+      proxy_password=proxy_password,  # pyright: ignore[reportArgumentType]
       certificates=certificates_,
       use_adblock=use_adblock,
       use_captcha_solver=use_captcha_solver,
@@ -1102,7 +1102,7 @@ class SmoothAsyncClient(BaseClient):
     """Submits a task to be run asynchronously."""
     try:
       session = await self._ensure_session()
-      async with session.post(f"{self.base_url}/task", json=payload.model_dump()) as response:
+      async with session.post(f"{self.base_url}/task", json=payload.model_dump(context={"reveal_secrets": True})) as response:
         data = await self._handle_response(response)
         return TaskResponse(**data["r"])
     except aiohttp.ClientError as e:
@@ -1213,9 +1213,9 @@ class SmoothAsyncClient(BaseClient):
           url=url,
           proxy_server=proxy_server,
           proxy_username=proxy_username,
-          proxy_password=proxy_password,
+          proxy_password=proxy_password,  # pyright: ignore[reportArgumentType]
           extensions=extensions,
-        ).model_dump(),
+        ).model_dump(context={"reveal_secrets": True}),
       ) as response:
         data = await self._handle_response(response)
         return BrowserSessionHandle(browser_session=BrowserSessionResponse(**data["r"]))

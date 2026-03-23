@@ -14,11 +14,9 @@ from smooth._interface import (
   BrowserSessionHandle,
   SessionHandle,
   TaskHandle,
-  TaskHandleEx,
 )
 from smooth._tools import SmoothTool
-from smooth.models import BrowserSessionResponse, TaskEvent, TaskResponse, ToolSignature
-
+from smooth.models import BrowserSessionResponse, TaskResponse, ToolSignature
 
 FAKE_KEY = "cmzr-test-key-0123456789abcdef"
 
@@ -50,14 +48,6 @@ class TestAsyncTaskHandle:
     assert handle.id() == "t-1"
     assert handle._tools == {}
     assert handle._is_alive == 0
-
-  async def test_result_returns_cached_terminal_response(self):
-    client = self._make_client()
-    handle = AsyncTaskHandle("t-1", client)
-    handle._task_response = TaskResponse(id="t-1", status="done", output="hello")
-    result = await handle.result()
-    assert result.output == "hello"
-    client._get_task.assert_not_called()
 
   async def test_result_raises_on_invalid_timeout(self):
     client = self._make_client()

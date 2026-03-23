@@ -5,6 +5,8 @@ import os
 import urllib.parse
 from typing import Any
 
+from pydantic import SecretStr
+
 from .models import Certificate
 
 # Configure logging
@@ -43,11 +45,16 @@ def process_certificates(
     processed_cert = Certificate(**cert) if isinstance(cert, dict) else cert.model_copy()  # Create a copy
 
     file_content = processed_cert.file
+    if isinstance(file_content, SecretStr):
+      file_content = file_content.get_secret_value()
+
     if isinstance(file_content, io.IOBase):
       # Read the binary content and encode to base64
       binary_data = file_content.read()
-      processed_cert.file = base64.b64encode(binary_data).decode("utf-8")
-    elif not isinstance(file_content, str):
+      processed_cert.file = SecretStr(base64.b64encode(binary_data).decode("utf-8"))
+    elif isinstance(file_content, str):
+      processed_cert.file = SecretStr(file_content)
+    else:
       raise TypeError(f"Certificate file must be a string or binary IO, got {type(file_content)}")
 
     processed_certs.append(processed_cert)

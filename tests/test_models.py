@@ -9,12 +9,12 @@ from smooth.models import (
   BrowserProfilesResponse,
   BrowserSessionRequest,
   BrowserSessionResponse,
+  Certificate,
   TaskEvent,
   TaskRequest,
   TaskResponse,
   ToolSignature,
 )
-
 
 # --- TaskRequest ---
 
@@ -62,8 +62,56 @@ class TestTaskRequest:
     assert req.task is None
 
   def test_extra_fields_allowed(self):
-    req = TaskRequest(task="x", some_future_field="hello")
+    req = TaskRequest(task="x", some_future_field="hello")  # pyright: ignore[reportCallIssue]
     assert req.model_dump()["some_future_field"] == "hello"
+
+  def test_proxy_password_masked_by_default(self):
+    req = TaskRequest(task="x", proxy_password="super-secret")  # pyright: ignore[reportArgumentType]
+    data = req.model_dump()
+    assert data["proxy_password"] == "**********"
+
+  def test_proxy_password_revealed_with_context(self):
+    req = TaskRequest(task="x", proxy_password="super-secret")  # pyright: ignore[reportArgumentType]
+    data = req.model_dump(context={"reveal_secrets": True})
+    assert data["proxy_password"] == "super-secret"
+
+  def test_certificates_masked_by_default(self):
+    req = TaskRequest(
+      task="x",
+      certificates=[Certificate(file="base64-cert-data", password="cert-pass")],  # pyright: ignore[reportArgumentType]
+    )
+    data = req.model_dump()
+    assert data["certificates"][0]["file"] == "**********"
+    assert data["certificates"][0]["password"] == "**********"
+
+  def test_certificates_revealed_with_context(self):
+    req = TaskRequest(
+      task="x",
+      certificates=[Certificate(file="base64-cert-data", password="cert-pass")],  # pyright: ignore[reportArgumentType]
+    )
+    data = req.model_dump(context={"reveal_secrets": True})
+    assert data["certificates"][0]["file"] == "base64-cert-data"
+    assert data["certificates"][0]["password"] == "cert-pass"
+
+  def test_none_secrets_remain_none(self):
+    req = TaskRequest(task="x")
+    data = req.model_dump()
+    assert data["proxy_password"] is None
+
+
+# --- BrowserSessionRequest secrets ---
+
+
+class TestBrowserSessionRequestSecrets:
+  def test_proxy_password_masked_by_default(self):
+    req = BrowserSessionRequest(proxy_password="secret-pw")  # pyright: ignore[reportArgumentType]
+    data = req.model_dump()
+    assert data["proxy_password"] == "**********"
+
+  def test_proxy_password_revealed_with_context(self):
+    req = BrowserSessionRequest(proxy_password="secret-pw")  # pyright: ignore[reportArgumentType]
+    data = req.model_dump(context={"reveal_secrets": True})
+    assert data["proxy_password"] == "secret-pw"
 
 
 # --- TaskResponse ---
@@ -78,8 +126,8 @@ class TestTaskResponse:
     assert resp.live_url is None
 
   @pytest.mark.parametrize("status", ["waiting", "running", "done", "failed", "cancelled"])
-  def test_all_statuses(self, status):
-    resp = TaskResponse(id="t-1", status=status)
+  def test_all_statuses(self, status):  # pyright: ignore[reportUnknownParameterType, reportMissingParameterType]
+    resp = TaskResponse(id="t-1", status=status)  # pyright: ignore[reportUnknownArgumentType]
     assert resp.status == status
 
   def test_with_all_fields(self):

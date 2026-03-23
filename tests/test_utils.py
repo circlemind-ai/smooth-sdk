@@ -48,29 +48,29 @@ class TestProcessCertificates:
 
   def test_converts_bytes_io_to_base64(self):
     data = b"fake-cert-binary-data"
-    cert = Certificate(file=io.BytesIO(data), password="secret")
+    cert = Certificate(file=io.BytesIO(data), password="secret")  # pyright: ignore[reportArgumentType]
     result = process_certificates([cert])
     assert result is not None
     assert len(result) == 1
-    assert result[0].file == base64.b64encode(data).decode("utf-8")
-    assert result[0].password == "secret"
+    assert result[0].file.get_secret_value() == base64.b64encode(data).decode("utf-8")
+    assert result[0].password.get_secret_value() == "secret"  # pyright: ignore[reportOptionalMemberAccess]
 
   def test_passes_through_string_file(self):
     cert = Certificate(file="already-base64-encoded")
     result = process_certificates([cert])
     assert result is not None
-    assert result[0].file == "already-base64-encoded"
+    assert result[0].file.get_secret_value() == "already-base64-encoded"
 
   def test_handles_dict_input_with_string(self):
     result = process_certificates([{"file": "some-string"}])
     assert result is not None
-    assert result[0].file == "some-string"
+    assert result[0].file.get_secret_value() == "some-string"
 
   def test_handles_dict_input_with_binary_io(self):
     data = b"cert-from-dict"
     result = process_certificates([{"file": io.BytesIO(data)}])
     assert result is not None
-    assert result[0].file == base64.b64encode(data).decode("utf-8")
+    assert result[0].file.get_secret_value() == base64.b64encode(data).decode("utf-8")
 
   def test_raises_on_invalid_file_type(self):
     cert = Certificate(file=12345)
@@ -80,15 +80,15 @@ class TestProcessCertificates:
   def test_does_not_mutate_original(self):
     cert = Certificate(file="original")
     process_certificates([cert])
-    assert cert.file == "original"
+    assert cert.file.get_secret_value() == "original"
 
   def test_multiple_certificates(self):
     certs = [
       Certificate(file=io.BytesIO(b"cert1")),
       Certificate(file="cert2-string"),
     ]
-    result = process_certificates(certs)
+    result = process_certificates(certs)  # pyright: ignore[reportArgumentType]
     assert result is not None
     assert len(result) == 2
-    assert result[0].file == base64.b64encode(b"cert1").decode("utf-8")
-    assert result[1].file == "cert2-string"
+    assert result[0].file.get_secret_value() == base64.b64encode(b"cert1").decode("utf-8")
+    assert result[1].file.get_secret_value() == "cert2-string"
