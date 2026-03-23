@@ -136,7 +136,14 @@ class FRPProxy:
         max_retries = 3
         for attempt in range(max_retries):
           try:
-            urllib.request.urlretrieve(url, tmp_path)
+            resp = urllib.request.urlopen(url)
+            if resp.status != 200:
+              raise urllib.error.URLError(f"HTTP {resp.status} downloading FRP")
+            content_type = resp.headers.get("Content-Type", "")
+            if "text/html" in content_type:
+              raise urllib.error.URLError(f"Unexpected Content-Type: {content_type}")
+            with open(tmp_path, "wb") as f:
+              shutil.copyfileobj(resp, f)
             break
           except (urllib.error.URLError, OSError) as e:
             if attempt == max_retries - 1:
