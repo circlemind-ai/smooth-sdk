@@ -21,6 +21,12 @@ SensitiveStr = Annotated[SecretStr, PlainSerializer(_serialize_secret, when_used
 
 DeviceType = Literal["desktop", "mobile", "desktop-lg"]
 
+class Secret(BaseModel):
+  """A secret value with URL-based access control."""
+
+  value: SensitiveStr = Field(description="The secret value.")
+  allowed_urls: list[str] = Field(description="URL patterns where this secret can be used (e.g. 'https://github.com/*').")
+
 
 class Certificate(BaseModel):
   """Client certificate for accessing secure websites.

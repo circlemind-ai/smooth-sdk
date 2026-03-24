@@ -14,6 +14,7 @@ from ._tools import (
   AsyncSmoothTool,
   SmoothTool,
 )
+from .models import Secret
 
 # Export public API
 __all__ = [
@@ -28,6 +29,7 @@ __all__ = [
   "BadRequestError",
   "TimeoutError",
   "ToolCallError",
+  "Secret",
   # Deprecated
   "TaskHandle",
   "AsyncTaskHandle",

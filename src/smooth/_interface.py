@@ -19,6 +19,7 @@ from .models import (
   ActionGotoResponse,
   ActionRunTaskResponse,
   BrowserSessionResponse,
+  Secret,
   TaskEvent,
   TaskResponse,
   TaskUpdateRequest,
@@ -566,6 +567,7 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, Any] | None = None,
+    secrets: dict[str, Secret] | None = None,
   ):
     """Extracts from the given URL."""
     if response_model is not None and not isinstance(response_model, dict):
@@ -580,6 +582,7 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
           "response_model": response_model,
           "url": url,
           "metadata": metadata,
+          "secrets": {k: v.model_dump(context={"reveal_secrets": True}) for k, v in secrets.items()} if secrets else None,
         },
       },
     )
