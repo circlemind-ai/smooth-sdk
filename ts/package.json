@@ -23,6 +23,11 @@
     "README.md",
     "LICENSE"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/circlemind-ai/smooth-sdk",
+    "directory": "ts"
+  },
   "engines": {
     "node": ">=18"
   },
