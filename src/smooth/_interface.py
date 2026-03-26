@@ -724,9 +724,10 @@ class SessionHandle(TaskHandleEx):
     response_model: dict[str, Any] | Type[BaseModel] | None = None,
     url: str | None = None,
     metadata: dict[str, Any] | None = None,
+    secrets: dict[str, Secret] | None = None,
   ):
     """Extracts from the given URL."""
-    return self._run_async(self._async_handle.run_task(task, max_steps, response_model, url, metadata))
+    return self._run_async(self._async_handle.run_task(task, max_steps, response_model, url, metadata, secrets))
 
   def result(self, timeout: int | None = None, poll_interval: float | None = None) -> "TaskResponse":
     """Waits for the session to close and returns the result."""

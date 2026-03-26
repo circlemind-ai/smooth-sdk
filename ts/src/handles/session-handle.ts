@@ -6,6 +6,7 @@ import type {
   ActionEvaluateJSResponse,
   ActionRunTaskResponse,
   ActionCloseResponse,
+  Secret,
 } from "../models/types.js";
 import {
   ActionGotoResponseSchema,
@@ -127,6 +128,7 @@ export class SessionHandle extends TaskHandle {
     responseModel?: Record<string, unknown> | null;
     url?: string | null;
     metadata?: Record<string, unknown> | null;
+    secrets?: Record<string, Secret> | null;
   }): Promise<ActionRunTaskResponse> {
     const start = performance.now();
     try {
@@ -140,6 +142,7 @@ export class SessionHandle extends TaskHandle {
             response_model: options.responseModel ?? null,
             url: options.url ?? null,
             metadata: options.metadata ?? null,
+            secrets: options.secrets ?? null,
           },
         },
       };

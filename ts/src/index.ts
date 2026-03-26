@@ -27,6 +27,7 @@ export type {
   Agent,
   Certificate,
   ToolSignature,
+  Secret,
   TaskEvent,
   TaskEventResponse,
   TaskRequest,

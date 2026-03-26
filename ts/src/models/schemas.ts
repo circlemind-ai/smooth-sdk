@@ -29,6 +29,11 @@ export const ToolSignatureSchema = z.object({
   output: z.string(),
 });
 
+export const SecretSchema = z.object({
+  value: z.string(),
+  allowed_urls: z.array(z.string()),
+});
+
 export const TaskEventSchema = z.object({
   name: z.string(),
   payload: z.record(z.any()),

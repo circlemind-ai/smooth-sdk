@@ -5,6 +5,7 @@ import {
   AgentSchema,
   CertificateSchema,
   ToolSignatureSchema,
+  SecretSchema,
   TaskEventSchema,
   TaskEventResponseSchema,
   TaskRequestSchema,
@@ -26,6 +27,7 @@ export type TaskStatus = z.infer<typeof TaskStatusSchema>;
 export type Agent = z.infer<typeof AgentSchema>;
 export type Certificate = z.infer<typeof CertificateSchema>;
 export type ToolSignature = z.infer<typeof ToolSignatureSchema>;
+export type Secret = z.infer<typeof SecretSchema>;
 export type TaskEvent = z.infer<typeof TaskEventSchema>;
 export type TaskEventResponse = z.infer<typeof TaskEventResponseSchema>;
 export type TaskRequest = z.infer<typeof TaskRequestSchema>;
