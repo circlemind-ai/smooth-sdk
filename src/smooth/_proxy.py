@@ -9,7 +9,10 @@ The proxy connects to a remote FRP server and exposes a local SOCKS5 proxy
 that can be used by the browser session.
 """
 
+import contextlib
+import fcntl
 import logging
+import os
 import platform
 import shutil
 import subprocess
@@ -30,8 +33,20 @@ FRP_VERSION = "0.66.0"
 # Directory to store FRP binaries and configs
 FRP_DIR = Path.home() / ".smooth" / "frp"
 
-# Lock to prevent concurrent FRP installations from racing
-_install_lock = threading.Lock()
+@contextlib.contextmanager
+def _file_lock(lock_path: Path):
+    """Cross-process file lock using fcntl (Unix) or msvcrt (Windows)."""
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = open(lock_path, "w")
+    try:
+        if platform.system().lower() == "windows":
+            import msvcrt
+            msvcrt.locking(fd.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fd.close()
 
 
 @dataclass
@@ -114,16 +129,16 @@ class FRPProxy:
     bin_name = "frpc.exe" if os_name == "windows" else "frpc"
     bin_path = FRP_DIR / bin_name
 
-    # Check if binary already exists
+    # Fast path: binary already installed
     if bin_path.exists():
       return bin_path
 
-    with _install_lock:
-      # Re-check after acquiring lock (another thread may have installed it)
+    # Cross-process lock: only one process downloads at a time
+    with _file_lock(FRP_DIR / ".install.lock"):
+      # Re-check after acquiring lock (another process may have installed it)
       if bin_path.exists():
         return bin_path
 
-      # Construct download URL
       folder_name = f"frp_{FRP_VERSION}_{os_name}_{arch}"
       filename = f"{folder_name}.{ext}"
       url = f"https://github.com/fatedier/frp/releases/download/v{FRP_VERSION}/{filename}"
@@ -149,11 +164,14 @@ class FRPProxy:
             if attempt == max_retries - 1:
               raise
             backoff = 2 ** attempt
-            logging.getLogger("smooth").warning("FRP download failed (attempt %d/%d), retrying in %ds: %s", attempt + 1, max_retries, backoff, e)
+            logging.getLogger("smooth").warning(
+              "FRP download failed (attempt %d/%d), retrying in %ds: %s",
+              attempt + 1, max_retries, backoff, e,
+            )
             time.sleep(backoff)
 
-        # Extract to a unique temp dir to avoid races
-        extract_dir = FRP_DIR / f"extract_tmp_{threading.get_ident()}"
+        # Extract to a unique temp dir (PID-based to avoid cross-process collisions)
+        extract_dir = FRP_DIR / f"extract_tmp_{os.getpid()}"
         extract_dir.mkdir(exist_ok=True)
 
         if ext == "zip":
@@ -163,23 +181,26 @@ class FRPProxy:
           with tarfile.open(tmp_path, "r:gz") as t:
             t.extractall(extract_dir)
 
-        # Move binary
+        # Move binary: write to temp name, chmod, then atomic rename
         src = extract_dir / folder_name / bin_name
-        if bin_path.exists():
-          bin_path.unlink()
-        shutil.move(str(src), str(bin_path))
+        tmp_bin = FRP_DIR / f".{bin_name}.tmp.{os.getpid()}"
+        shutil.move(str(src), str(tmp_bin))
+
+        if os_name != "windows":
+          tmp_bin.chmod(0o755)
+
+        os.rename(str(tmp_bin), str(bin_path))
 
         # Cleanup
-        tmp_path.unlink()
+        tmp_path.unlink(missing_ok=True)
         shutil.rmtree(extract_dir, ignore_errors=True)
-
-        # Make executable on Unix
-        if os_name != "windows":
-          bin_path.chmod(0o755)
 
         return bin_path
 
       except Exception as e:
+        # Clean up partial artifacts on failure
+        tmp_bin = FRP_DIR / f".{bin_name}.tmp.{os.getpid()}"
+        tmp_bin.unlink(missing_ok=True)
         raise RuntimeError(f"Failed to install FRP: {e}") from e
 
   def _create_config(self) -> Path:
