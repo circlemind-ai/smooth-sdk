@@ -9,6 +9,7 @@ The proxy connects to a remote FRP server and exposes a local SOCKS5 proxy
 that can be used by the browser session.
 """
 
+import collections
 import contextlib
 import fcntl
 import logging
@@ -26,6 +27,8 @@ import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+_frpc_logger = logging.getLogger("smooth.frpc")
 
 # FRP version to use
 FRP_VERSION = "0.66.0"
@@ -63,9 +66,11 @@ class ProxyConfig:
 class _ProxyState:
   """Internal state for a proxy instance."""
 
-  process: subprocess.Popen[bytes] | None = None
+  process: subprocess.Popen[str] | None = None
   config_file: Path | None = None
   lock: threading.Lock = field(default_factory=threading.Lock)
+  log_tail: collections.deque[str] = field(default_factory=lambda: collections.deque(maxlen=200))
+  drain_thread: threading.Thread | None = None
 
 
 class FRPProxy:
@@ -222,7 +227,8 @@ auth:
   token: "{self.config.token}"
 
 log:
-  level: "error"
+  to: "console"
+  level: "info"
 
 transport:
   protocol: "wss"
@@ -257,27 +263,52 @@ proxies:
         # Build command
         cmd = [str(self._bin_path), "-c", str(self._state.config_file)]
 
-        # Start process with suppressed output
+        # Pipe stdout/stderr so we can forward frpc's own logs through Python's
+        # logging system (captured by pytest/log handlers) and keep a bounded
+        # tail for error reporting.
         self._state.process = subprocess.Popen(
           cmd,
-          stdout=subprocess.DEVNULL,
-          stderr=subprocess.DEVNULL,
+          stdout=subprocess.PIPE,
+          stderr=subprocess.STDOUT,
+          bufsize=1,
+          text=True,
         )
 
-        # Give it a moment to start and check if it failed immediately
-        try:
-            # Wait for the process to exit or timeout
-            stdout_data, stderr_data = self._state.process.communicate(timeout=1.0)
+        session_id = self.config.session_id
+        proc = self._state.process
+        tail = self._state.log_tail
 
-            # If we get here, the process exited within 1 second
-            stderr = stderr_data.decode() if stderr_data else ""
-            stdout = stdout_data.decode() if stdout_data else ""
-            self._cleanup()
-            raise RuntimeError(f"FRP process exited immediately: {stderr}. Output: {stdout}")
-
-        except subprocess.TimeoutExpired:
-            # Process is still running after 1 second
+        def _drain() -> None:
+          assert proc.stdout is not None
+          try:
+            for line in proc.stdout:
+              line = line.rstrip()
+              if not line:
+                continue
+              tail.append(line)
+              _frpc_logger.info("[%s] %s", session_id, line)
+          except Exception:
             pass
+
+        self._state.drain_thread = threading.Thread(
+          target=_drain, name=f"frpc-drain-{session_id}", daemon=True,
+        )
+        self._state.drain_thread.start()
+
+        # Give it a moment to start and check if it failed immediately.
+        try:
+          self._state.process.wait(timeout=1.0)
+          rc = self._state.process.returncode
+          # Let the drain thread flush what it has.
+          self._state.drain_thread.join(timeout=0.5)
+          tail_str = "\n".join(tail)
+          self._cleanup()
+          raise RuntimeError(
+            f"FRP process exited immediately (rc={rc}). frpc output:\n{tail_str}"
+          )
+        except subprocess.TimeoutExpired:
+          # Process is still running after 1 second — expected happy path.
+          pass
 
       except Exception as e:
         self._cleanup()
@@ -303,6 +334,13 @@ proxies:
       except Exception:
         pass
       self._state.process = None
+
+    if self._state.drain_thread is not None:
+      try:
+        self._state.drain_thread.join(timeout=1.0)
+      except Exception:
+        pass
+      self._state.drain_thread = None
 
     if self._state.config_file is not None:
       try:
