@@ -5,6 +5,7 @@ import io
 import os
 import secrets
 import threading
+import warnings
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Callable, Coroutine, Generator, Sequence, Type, TypedDict, TypeVar, cast
@@ -177,6 +178,7 @@ class SmoothClient(BaseClient):
     profile_id: str | None = None,
     profile_read_only: bool = False,
     stealth_mode: bool = False,
+    use_stealth: bool = True,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
@@ -190,6 +192,12 @@ class SmoothClient(BaseClient):
     show_cursor: bool = False,
   ) -> SessionHandle:
     """Opens a browser session."""
+    if stealth_mode:
+      warnings.warn(
+        "'stealth_mode' is deprecated and ignored, use 'use_stealth' instead (defaults to True)",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     # Handle proxy_server="self" - auto-start local proxy tunnel
     self_proxy = proxy_server == "self"
     if self_proxy and not proxy_password:
@@ -206,6 +214,7 @@ class SmoothClient(BaseClient):
       profile_id=profile_id,
       profile_read_only=profile_read_only,
       stealth_mode=stealth_mode,
+      use_stealth=use_stealth,
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
@@ -252,6 +261,7 @@ class SmoothClient(BaseClient):
     profile_id: str | None = None,
     profile_read_only: bool = False,
     stealth_mode: bool = False,
+    use_stealth: bool = True,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
@@ -285,7 +295,8 @@ class SmoothClient(BaseClient):
         session_id: (Deprecated, now `profile_id`) Browser session ID to use.
         profile_id: Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials.
         profile_read_only: If true, the profile specified by `profile_id` will be loaded in read-only mode.
-        stealth_mode: Run the browser in stealth mode.
+        stealth_mode: (Deprecated, ignored) Use `use_stealth` instead.
+        use_stealth: Run the browser in stealth mode. Default is True.
         proxy_server: Proxy server address to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
@@ -307,6 +318,12 @@ class SmoothClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
+    if stealth_mode:
+      warnings.warn(
+        "'stealth_mode' is deprecated and ignored, use 'use_stealth' instead (defaults to True)",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     custom_tools_ = (
       [tool if isinstance(tool, SmoothTool) else SmoothTool(**tool) for tool in custom_tools] if custom_tools else None
     )
@@ -332,6 +349,7 @@ class SmoothClient(BaseClient):
         profile_id=profile_id or session_id,
         profile_read_only=profile_read_only,
         stealth_mode=stealth_mode,
+        use_stealth=use_stealth,
         proxy_server=proxy_server,
         proxy_username=proxy_username,
         proxy_password=proxy_password,
@@ -628,6 +646,7 @@ class SmoothAsyncClient(BaseClient):
     profile_id: str | None = None,
     profile_read_only: bool = False,
     stealth_mode: bool = False,
+    use_stealth: bool = True,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
@@ -651,6 +670,12 @@ class SmoothAsyncClient(BaseClient):
         async with client.session(...) as session:
             ...
     """
+    if stealth_mode:
+      warnings.warn(
+        "'stealth_mode' is deprecated and ignored, use 'use_stealth' instead (defaults to True)",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     return _AsyncSessionContextManager(self._session_coro(
       url=None,
       files=files,
@@ -661,6 +686,7 @@ class SmoothAsyncClient(BaseClient):
       profile_id=profile_id,
       profile_read_only=profile_read_only,
       stealth_mode=stealth_mode,
+      use_stealth=use_stealth,
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
@@ -695,6 +721,7 @@ class SmoothAsyncClient(BaseClient):
     profile_id: str | None = None,
     profile_read_only: bool = False,
     stealth_mode: bool = False,
+    use_stealth: bool = True,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
@@ -724,6 +751,7 @@ class SmoothAsyncClient(BaseClient):
       profile_id=profile_id,
       profile_read_only=profile_read_only,
       stealth_mode=stealth_mode,
+      use_stealth=use_stealth,
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
@@ -783,6 +811,7 @@ class SmoothAsyncClient(BaseClient):
     profile_id: str | None = None,
     profile_read_only: bool = False,
     stealth_mode: bool = False,
+    use_stealth: bool = True,
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
@@ -815,7 +844,8 @@ class SmoothAsyncClient(BaseClient):
         session_id: (Deprecated, now `profile_id`) Browser session ID to use.
         profile_id: Browser profile ID to use. Each profile maintains its own state, such as cookies and login credentials.
         profile_read_only: If true, the profile specified by `profile_id` will be loaded in read-only mode.
-        stealth_mode: Run the browser in stealth mode.
+        stealth_mode: (Deprecated, ignored) Use `use_stealth` instead.
+        use_stealth: Run the browser in stealth mode. Default is True.
         proxy_server: Proxy server address to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
@@ -837,6 +867,12 @@ class SmoothAsyncClient(BaseClient):
     Raises:
         ApiException: If the API request fails.
     """
+    if stealth_mode:
+      warnings.warn(
+        "'stealth_mode' is deprecated and ignored, use 'use_stealth' instead (defaults to True)",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     if proxy_server == "self" and task is not None:
       raise BadRequestError(
         'proxy_server="self" is not supported in run(). '
@@ -864,6 +900,7 @@ class SmoothAsyncClient(BaseClient):
       profile_id=profile_id or session_id,
       profile_read_only=profile_read_only,
       stealth_mode=stealth_mode,
+      use_stealth=use_stealth,
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,  # pyright: ignore[reportArgumentType]

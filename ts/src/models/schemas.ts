@@ -62,7 +62,9 @@ export const TaskRequestSchema = z.object({
   enable_recording: z.boolean().default(true),
   profile_id: z.string().nullish(),
   profile_read_only: z.boolean().default(false),
+  /** @deprecated ignored by the server. Use `use_stealth` instead (defaults to true). */
   stealth_mode: z.boolean().default(false),
+  use_stealth: z.boolean().default(true),
   proxy_server: z.string().nullish(),
   proxy_username: z.string().nullish(),
   proxy_password: z.string().nullish(),

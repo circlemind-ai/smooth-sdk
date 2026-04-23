@@ -25,6 +25,7 @@ describe("TaskRequestSchema", () => {
     expect(req.device).toBe("desktop");
     expect(req.enable_recording).toBe(true);
     expect(req.stealth_mode).toBe(false);
+    expect(req.use_stealth).toBe(true);
     expect(req.use_adblock).toBe(true);
     expect(req.use_captcha_solver).toBe(true);
     expect(req.show_cursor).toBe(false);

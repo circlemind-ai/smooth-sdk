@@ -51,7 +51,9 @@ export interface RunOptions {
   enableRecording?: boolean;
   profileId?: string | null;
   profileReadOnly?: boolean;
+  /** @deprecated ignored by the server. Use `useStealth` instead (defaults to true). */
   stealthMode?: boolean;
+  useStealth?: boolean;
   proxyServer?: string | null;
   proxyUsername?: string | null;
   proxyPassword?: string | null;
@@ -118,6 +120,11 @@ export class SmoothClient {
   // --- Task / Session ---
 
   async run(options: RunOptions): Promise<TaskHandle> {
+    if (options.stealthMode !== undefined) {
+      console.warn(
+        "[smooth] 'stealthMode' is deprecated and ignored, use 'useStealth' instead (defaults to true).",
+      );
+    }
     const start = performance.now();
     try {
       const certificates = processCertificates(options.certificates);
@@ -154,6 +161,11 @@ export class SmoothClient {
 
   async session(options?: SessionOptions): Promise<SessionHandle> {
     const opts = options ?? {};
+    if (opts.stealthMode !== undefined) {
+      console.warn(
+        "[smooth] 'stealthMode' is deprecated and ignored, use 'useStealth' instead (defaults to true).",
+      );
+    }
     const start = performance.now();
 
     const selfProxy = opts.proxyServer === "self";
@@ -446,6 +458,7 @@ function buildTaskPayload(
     profile_id: options.profileId ?? null,
     profile_read_only: options.profileReadOnly ?? false,
     stealth_mode: options.stealthMode ?? false,
+    use_stealth: options.useStealth ?? true,
     proxy_server: options.proxyServer ?? null,
     proxy_username: options.proxyUsername ?? null,
     proxy_password: options.proxyPassword ?? null,

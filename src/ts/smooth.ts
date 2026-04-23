@@ -146,7 +146,9 @@ interface TaskRequestPayload {
   profile_id?: string | null;
   session_id?: string | null; // For retro-compatibility
   profile_read_only?: boolean;
+  /** @deprecated ignored by the server. Use `use_stealth` instead (defaults to true). */
   stealth_mode?: boolean;
+  use_stealth?: boolean;
   proxy_server?: string | null;
   proxy_username?: string | null;
   proxy_password?: string | null;
@@ -179,7 +181,11 @@ export interface RunTaskOptions {
   session_id?: string | null;
   profile_id?: string | null;
   profile_read_only?: boolean;
+  /**
+   * @deprecated ignored by the server. Use `use_stealth` instead (defaults to true).
+   */
   stealth_mode?: boolean;
+  use_stealth?: boolean;
   proxy_server?: string | null;
   proxy_username?: string | null;
   proxy_password?: string | null;
@@ -218,7 +224,11 @@ export interface SessionOptions {
   enable_recording?: boolean;
   profile_id?: string | null;
   profile_read_only?: boolean;
+  /**
+   * @deprecated ignored by the server. Use `use_stealth` instead (defaults to true).
+   */
   stealth_mode?: boolean;
+  use_stealth?: boolean;
   proxy_server?: string | null;
   proxy_username?: string | null;
   proxy_password?: string | null;
@@ -1206,6 +1216,9 @@ export class SmoothClient {
    * @returns A handle to the session.
    */
   public async session(options: SessionOptions = {}): Promise<SessionHandle> {
+    if (options.stealth_mode !== undefined) {
+      console.warn("[smooth] 'stealth_mode' is deprecated and ignored, use 'use_stealth' instead (defaults to true).");
+    }
     const taskHandle = await this.run({
       task: null as any, // Opens a blank browser
       url: options.url,
@@ -1217,6 +1230,7 @@ export class SmoothClient {
       profile_id: options.profile_id,
       profile_read_only: options.profile_read_only ?? false,
       stealth_mode: options.stealth_mode ?? false,
+      use_stealth: options.use_stealth ?? true,
       proxy_server: options.proxy_server,
       proxy_username: options.proxy_username,
       proxy_password: options.proxy_password,
@@ -1239,6 +1253,9 @@ export class SmoothClient {
   public async run(options: RunTaskOptions): Promise<TaskHandle> {
     if (options.session_id && !options.profile_id) {
       console.warn("'session_id' is deprecated, use 'profile_id' instead");
+    }
+    if (options.stealth_mode !== undefined) {
+      console.warn("[smooth] 'stealth_mode' is deprecated and ignored, use 'use_stealth' instead (defaults to true).");
     }
 
     const profile_id = options.profile_id ?? options.session_id;
@@ -1264,6 +1281,7 @@ export class SmoothClient {
       session_id: profile_id, // Add deprecated session_id for retro-compatibility
       profile_read_only: options.profile_read_only ?? false,
       stealth_mode: options.stealth_mode ?? false,
+      use_stealth: options.use_stealth ?? true,
       proxy_server: options.proxy_server,
       proxy_username: options.proxy_username,
       proxy_password: options.proxy_password,

@@ -118,7 +118,12 @@ class TaskRequest(BaseModel):
       "Changes made during the task will not be saved back to the profile."
     ),
   )
-  stealth_mode: bool = Field(default=False, description="Run the browser in stealth mode.")
+  stealth_mode: bool = Field(
+    default=False,
+    description="(Deprecated, ignored) Use `use_stealth` instead. Stealth is on by default.",
+    deprecated=True,
+  )
+  use_stealth: bool = Field(default=True, description="Run the browser in stealth mode. Default is True.")
   proxy_server: str | None = Field(
     default=None,
     description=("Proxy server url to route browser traffic through."),
@@ -367,6 +372,7 @@ class BrowserSessionRequest(BaseModel):
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: SensitiveStr | None = Field(default=None, description="Proxy server password.")
   extensions: list[str] | None = Field(default=None, description="List of extensions to install for the task.")
+  use_stealth: bool = Field(default=True, description="Run the browser in stealth mode. Default is True.")
 
   @model_validator(mode="before")
   @classmethod
@@ -378,6 +384,17 @@ class BrowserSessionRequest(BaseModel):
         stacklevel=2,
       )
       data["profile_id"] = data.pop("session_id")  # pyright: ignore[reportUnknownMemberType]
+    return data  # pyright: ignore[reportUnknownVariableType]
+
+  @model_validator(mode="before")
+  @classmethod
+  def _handle_deprecated_stealth_mode(cls, data: Any) -> Any:
+    if isinstance(data, dict) and "stealth_mode" in data:
+      warnings.warn(
+        "'stealth_mode' is deprecated and ignored, use 'use_stealth' instead (defaults to True)",
+        DeprecationWarning,
+        stacklevel=2,
+      )
     return data  # pyright: ignore[reportUnknownVariableType]
 
   @computed_field(return_type=str | None)

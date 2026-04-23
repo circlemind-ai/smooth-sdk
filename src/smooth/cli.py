@@ -288,7 +288,7 @@ async def start_session(args: argparse.Namespace):
       device=args.device,
       allowed_urls=allowed_urls,
       enable_recording=True,  # Enabled by default
-      stealth_mode=True,  # Enabled by default
+      use_stealth=True,  # Enabled by default
       use_adblock=True,  # Enabled by default
       proxy_server=proxy_server,
       proxy_username=proxy_username,

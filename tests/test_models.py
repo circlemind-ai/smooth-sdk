@@ -28,6 +28,7 @@ class TestTaskRequest:
     assert req.device == "desktop"
     assert req.enable_recording is True
     assert req.stealth_mode is False
+    assert req.use_stealth is True
     assert req.use_adblock is True
     assert req.use_captcha_solver is True
     assert req.show_cursor is False
