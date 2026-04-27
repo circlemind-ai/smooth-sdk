@@ -245,6 +245,13 @@ class ProfileResponse(BaseModel):
   model_config = ConfigDict(extra="allow")
 
   id: str = Field(description="The ID of the created browser profile.")
+  cookie_domains: list[str] | None = Field(
+    default=None,
+    description="Registered domains (e.g. 'amazon.com') with cookies in this profile, most-recently-accessed first.",
+  )
+  cookie_count: int | None = Field(default=None, description="Total number of cookies stored in the profile.")
+  profile_size_bytes: int | None = Field(default=None, description="Size of the stored profile archive in bytes.")
+  last_saved_at: int | None = Field(default=None, description="Unix epoch seconds of the most recent profile save.")
 
 
 class UploadFileResponse(BaseModel):
