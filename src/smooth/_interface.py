@@ -281,7 +281,8 @@ class AsyncTaskHandle(BaseTaskHandle):
         try:
           while self._is_alive > 0:
             logger.debug(f"{poller_id} - polling")
-            await asyncio.sleep(self._poll_interval)
+            if not self._task_response.events and self._task_response.status in ("running", "waiting"):
+              await asyncio.sleep(self._poll_interval)
 
             try:
               task_response = await self._client._get_task(self.id(), query_params={"event_t": self._last_event_t})
