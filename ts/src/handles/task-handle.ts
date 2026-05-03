@@ -354,12 +354,22 @@ export class TaskHandle {
 
       try {
         while (this._isAlive > 0) {
-          await new Promise((r) => {
-            this._pollingTimer = setTimeout(r, this._pollInterval);
-            if (this._pollingTimer && typeof this._pollingTimer === "object" && "unref" in this._pollingTimer) {
-              this._pollingTimer.unref();
-            }
-          });
+          // Skip the throttle when the previous response carried progress: long-poll on
+          // the API holds the next GET open until events arrive, so an extra sleep here
+          // would just add per-command latency. Sleep only when the previous response
+          // returned fast with no progress (status running/waiting and no events).
+          if (
+            this._taskResponse === null ||
+            (!this._taskResponse.events?.length &&
+              ["running", "waiting"].includes(this._taskResponse.status))
+          ) {
+            await new Promise((r) => {
+              this._pollingTimer = setTimeout(r, this._pollInterval);
+              if (this._pollingTimer && typeof this._pollingTimer === "object" && "unref" in this._pollingTimer) {
+                this._pollingTimer.unref();
+              }
+            });
+          }
 
           if (this._isAlive <= 0) break;
 
