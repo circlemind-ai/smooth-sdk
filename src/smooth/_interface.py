@@ -453,6 +453,44 @@ class AsyncTaskHandleEx(_BaseAsyncTaskHandleEx):
     )
     return ActionEvaluateJSResponse(**((await self._send_event(event, has_result=True)) or {}))  # type: ignore
 
+  @track(
+    "session.run_task",
+    properties_fn=lambda a, kw: {
+      "task": kw.get("task") or (a[1] if len(a) > 1 else None),
+      "max_steps": kw.get("max_steps", 32),
+      "has_response_model": kw.get("response_model") is not None,
+      "url": kw.get("url"),
+    },
+  )
+  async def run_task(
+    self,
+    task: str,
+    max_steps: int = 32,
+    response_model: dict[str, Any] | Type[BaseModel] | None = None,
+    url: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    secrets: dict[str, Secret] | None = None,
+  ):
+    """Run a task in the session. From inside a custom tool, this spawns a sub-agent that
+    shares the browser; the parent agent stays parked until the sub-task returns."""
+    if response_model is not None and not isinstance(response_model, dict):
+      response_model = response_model.model_json_schema()
+    event = TaskEvent(
+      name="session_action",
+      payload={
+        "name": "run_task",
+        "input": {
+          "task": task,
+          "max_steps": max_steps,
+          "response_model": response_model,
+          "url": url,
+          "metadata": metadata,
+          "secrets": {k: v.model_dump(context={"reveal_secrets": True}) for k, v in secrets.items()} if secrets else None,
+        },
+      },
+    )
+    return ActionRunTaskResponse(**(await self._send_event(event, has_result=True) or {}))  # type: ignore
+
   # --- Private Methods ---
 
   async def _send_event(self, event: TaskEvent, has_result: bool = False) -> Any | None:
@@ -552,43 +590,6 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
       )
       raise
 
-  @track(
-    "session.run_task",
-    properties_fn=lambda a, kw: {
-      "task": kw.get("task") or (a[1] if len(a) > 1 else None),
-      "max_steps": kw.get("max_steps", 32),
-      "has_response_model": kw.get("response_model") is not None,
-      "url": kw.get("url"),
-    },
-  )
-  async def run_task(
-    self,
-    task: str,
-    max_steps: int = 32,
-    response_model: dict[str, Any] | Type[BaseModel] | None = None,
-    url: str | None = None,
-    metadata: dict[str, Any] | None = None,
-    secrets: dict[str, Secret] | None = None,
-  ):
-    """Extracts from the given URL."""
-    if response_model is not None and not isinstance(response_model, dict):
-      response_model = response_model.model_json_schema()
-    event = TaskEvent(
-      name="session_action",
-      payload={
-        "name": "run_task",
-        "input": {
-          "task": task,
-          "max_steps": max_steps,
-          "response_model": response_model,
-          "url": url,
-          "metadata": metadata,
-          "secrets": {k: v.model_dump(context={"reveal_secrets": True}) for k, v in secrets.items()} if secrets else None,
-        },
-      },
-    )
-    return ActionRunTaskResponse(**(await self._send_event(event, has_result=True) or {}))  # type: ignore
-
   async def result(self, timeout: int | None = None, poll_interval: float | None = None):
     """Waits for the session to close and returns the result."""
     if not self._closed:
@@ -679,6 +680,19 @@ class TaskHandleEx(_BaseTaskHandleEx):
     """Evaluates JavaScript code in the browser context."""
     return self._run_async(self._async_handle.evaluate_js(code, args))
 
+  def run_task(
+    self,
+    task: str,
+    max_steps: int = 32,
+    response_model: dict[str, Any] | Type[BaseModel] | None = None,
+    url: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    secrets: dict[str, Secret] | None = None,
+  ):
+    """Run a task in the session. From inside a custom tool, this spawns a sub-agent that
+    shares the browser; the parent agent stays parked until the sub-task returns."""
+    return self._run_async(self._async_handle.run_task(task, max_steps, response_model, url, metadata, secrets))
+
   # --- Deprecated Methods ---
 
   @deprecated("exec_js is deprecated, use evaluate_js instead")
@@ -717,18 +731,6 @@ class SessionHandle(TaskHandleEx):
   def close(self, force: bool = True):
     """Closes the session."""
     return self._run_async(self._async_handle.close(force))
-
-  def run_task(
-    self,
-    task: str,
-    max_steps: int = 32,
-    response_model: dict[str, Any] | Type[BaseModel] | None = None,
-    url: str | None = None,
-    metadata: dict[str, Any] | None = None,
-    secrets: dict[str, Secret] | None = None,
-  ):
-    """Extracts from the given URL."""
-    return self._run_async(self._async_handle.run_task(task, max_steps, response_model, url, metadata, secrets))
 
   def result(self, timeout: int | None = None, poll_interval: float | None = None) -> "TaskResponse":
     """Waits for the session to close and returns the result."""
