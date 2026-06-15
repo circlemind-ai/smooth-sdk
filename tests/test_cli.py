@@ -237,3 +237,49 @@ class TestCliArgumentParsing:
     args = argparse.Namespace(api_key="YOUR_API_KEY", show=False, json=False)
     with pytest.raises(SystemExit):
       config_command(args)
+
+
+# --- start-session integration: CLI wiring -> real client signatures ---
+
+
+class TestStartSessionExercisesRealClient:
+  """Drive `smooth start-session` through the real argparse parser and the real
+  SmoothAsyncClient.session() -> run() chain, mocking only the network boundary
+  (_submit_task / _get_task).
+
+  This is a guardrail against the class of bug where the CLI and the client get
+  out of sync: it fails if start_session() passes an argument the client method
+  no longer accepts (e.g. the `url` kwarg that broke start-session), or if a new
+  *required* parameter is added to the session-creation path that the CLI does
+  not supply. A plain AsyncMock client would not catch either, because it accepts
+  any signature -- here the real method signatures are exercised end to end.
+  """
+
+  def test_start_session_runs_through_real_client(self, tmp_smooth_dir, mock_env_api_key, capsys):
+    # Fixtures are requested for their side effects (hence "unused" params):
+    #   tmp_smooth_dir   -> redirect sessions.json so add_session() writes to tmp
+    #   mock_env_api_key -> satisfy SmoothAsyncClient()'s API-key requirement offline
+    from unittest.mock import AsyncMock
+
+    from smooth._client import SmoothAsyncClient
+    from smooth.cli import main
+    from smooth.models import TaskResponse
+
+    fake = TaskResponse(id="sess-test", status="running", live_url="https://live.example.com/abc")
+    submit = AsyncMock(return_value=fake)
+
+    with (
+      patch.object(SmoothAsyncClient, "_submit_task", submit),
+      # live_url() polls _get_task; mock it so the whole flow stays offline
+      patch.object(SmoothAsyncClient, "_get_task", AsyncMock(return_value=fake)),
+      patch("sys.argv", ["smooth", "start-session", "--no-proxy", "--json"]),
+    ):
+      main()
+
+    # Asserting on submit proves we reached the real session() -> run() -> _submit_task
+    # chain, i.e. start_session's kwargs bound against the real signature.
+    submit.assert_awaited_once()
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["success"] is True
+    assert result["session_id"] == "sess-test"
