@@ -70,10 +70,10 @@ The agent thinks about your goals. Smooth handles the browser.
 
 ```bash
 # Start a session
-smooth start-session --url "https://example.com"
+smooth start-session
 
-# Run a task
-smooth run <session-id> "Find the pricing page and extract all plan names and prices"
+# Run a task (navigate to a starting URL with --url)
+smooth run <session-id> "Find the pricing page and extract all plan names and prices" --url "https://example.com"
 
 # Close when done
 smooth close-session <session-id>
