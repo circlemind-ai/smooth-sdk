@@ -677,7 +677,6 @@ class SmoothAsyncClient(BaseClient):
         stacklevel=2,
       )
     return _AsyncSessionContextManager(self._session_coro(
-      url=None,
       files=files,
       agent=agent,
       device=device,
@@ -703,7 +702,6 @@ class SmoothAsyncClient(BaseClient):
   @track(
     "sdk.session",
     properties_fn=lambda a, kw: {
-      "url": kw.get("url") or (a[1] if len(a) > 1 else None),
       "device": kw.get("device", "desktop"),
       "profile_id": kw.get("profile_id"),
       "stealth_mode": kw.get("stealth_mode", False),
@@ -712,7 +710,6 @@ class SmoothAsyncClient(BaseClient):
   )
   async def _session_coro(
     self,
-    url: str | None = None,
     files: list[str] | None = None,
     agent: str = "smooth",
     device: DeviceType = "desktop",
@@ -742,7 +739,7 @@ class SmoothAsyncClient(BaseClient):
 
     task_handle = await self.run(
       task=None,  # type: ignore
-      url=url,
+      url=None,
       files=files,
       agent=agent,
       device=device,

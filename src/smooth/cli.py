@@ -281,7 +281,6 @@ async def start_session(args: argparse.Namespace):
       print(f"Using proxy: {proxy_server}")
 
     task_handle = await client.session(
-      url=args.url,
       files=files,
       profile_id=args.profile_id,
       profile_read_only=args.profile_read_only,
@@ -747,7 +746,6 @@ def main():
   start_session_parser = subparsers.add_parser("start-session", help="Start a browser session")
   start_session_parser.add_argument("--profile-id", help="Profile ID to use")
   start_session_parser.add_argument("--profile-read-only", action="store_true", help="Load profile in read-only mode")
-  start_session_parser.add_argument("--url", help="Starting URL for the session")
   start_session_parser.add_argument("--files", help="Comma-separated list of file IDs to make available in session")
   start_session_parser.add_argument(
     "--device", choices=["mobile", "desktop"], default="mobile", help="Device type (default: mobile)"
