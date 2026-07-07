@@ -129,16 +129,17 @@ def save_config(config: dict[str, Any]):
 
 def load_config_to_env():
   """Load API key from config file into environment if not already set."""
-  if not os.getenv("CIRCLEMIND_API_KEY"):
+  # SMOOTH_API_KEY is preferred; CIRCLEMIND_API_KEY is kept for backwards compatibility
+  if not (os.getenv("SMOOTH_API_KEY") or os.getenv("CIRCLEMIND_API_KEY")):
     config = load_config()
     api_key = config.get("api_key")
     if api_key:
-      os.environ["CIRCLEMIND_API_KEY"] = api_key
+      os.environ["SMOOTH_API_KEY"] = api_key
 
 
 def load_api_key():
   """Load API key from environment."""
-  api_key = os.getenv("CIRCLEMIND_API_KEY")
+  api_key = os.getenv("SMOOTH_API_KEY") or os.getenv("CIRCLEMIND_API_KEY")
   if not api_key:
     print_error(
       "API key not configured.\n"

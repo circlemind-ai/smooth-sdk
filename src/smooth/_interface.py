@@ -218,6 +218,83 @@ class AsyncTaskHandle(BaseTaskHandle):
     # Task completed - poll API directly for the downloads URL
     return await _poll_downloads_url()
 
+  async def _poll_task_field(
+    self, attr: str, timeout: int | None, require_nonempty: bool, unavailable_detail: str
+  ) -> Any:
+    """Polls the task until `attr` is populated on the task response, then returns it.
+
+    Args:
+        attr: The task-response attribute to read (e.g. "network_har_url").
+        timeout: Seconds to wait before giving up. None waits indefinitely.
+        require_nonempty: If True, an empty value means the artifact will never be available
+          and an ApiError is raised (the API returns an empty string when it is not enabled).
+        unavailable_detail: Detail for the ApiError raised when the artifact is unavailable.
+    """
+    loop = asyncio.get_running_loop()
+    start_time = loop.time()
+
+    def _read() -> Any:
+      return getattr(self._task_response, attr, None) if self._task_response else None
+
+    def _finalize(value: Any) -> Any:
+      if require_nonempty and not value:
+        raise ApiError(status_code=404, detail=unavailable_detail)
+      return value
+
+    # Fast path: already available.
+    value = _read()
+    if value is not None:
+      return _finalize(value)
+
+    async def _poll_direct() -> Any:
+      while timeout is None or (loop.time() - start_time) < timeout:
+        task_response = await self._client._get_task(self.id())
+        value = getattr(task_response, attr, None)
+        if value is not None:
+          return _finalize(value)
+        await asyncio.sleep(0.8)
+      raise TimeoutError(f"'{attr}' not available for task {self.id()}.")
+
+    # If the task is already done, poll the API directly without starting a new poller.
+    if self._task_response and self._task_response.status not in ["waiting", "running"]:
+      return await _poll_direct()
+
+    # Task is still running - use the poller to wait for updates.
+    async with self._connection():
+      while timeout is None or (loop.time() - start_time) < timeout:
+        value = _read()
+        if value is not None:
+          return _finalize(value)
+        if self._task_response and self._task_response.status not in ["waiting", "running"]:
+          break
+        await asyncio.sleep(0.2)
+
+    return await _poll_direct()
+
+  async def har_url(self, timeout: int | None = 30) -> str:
+    """Returns the presigned URL of the network HAR (gzipped) for the task."""
+    return await self._poll_task_field(
+      "network_har_url", timeout, require_nonempty=True,
+      unavailable_detail=f"Network HAR not available for task {self.id()}.",
+    )
+
+  async def console_log_url(self, timeout: int | None = 30) -> str:
+    """Returns the presigned URL of the browser console log for the task."""
+    return await self._poll_task_field(
+      "console_log_url", timeout, require_nonempty=True,
+      unavailable_detail=f"Console log not available for task {self.id()}.",
+    )
+
+  async def session_log(self, timeout: int | None = 30) -> list[dict[str, Any]]:
+    """Returns the timestamped session log (steps and actions) for the task.
+
+    The session log is written when the task completes, so this waits for completion.
+    """
+    return await self._poll_task_field(
+      "session_log", timeout, require_nonempty=False,
+      unavailable_detail=f"Session log not available for task {self.id()}.",
+    )
+
   # --- Proxy Methods ---
 
   def _start_proxy(self, server_url: str, token: str) -> None:
@@ -640,6 +717,18 @@ class TaskHandle(BaseTaskHandle):
   def downloads_url(self, timeout: int | None = 30) -> str:
     """Returns the downloads URL for the task."""
     return self._run_async(self._async_handle.downloads_url(timeout))
+
+  def har_url(self, timeout: int | None = 30) -> str:
+    """Returns the presigned URL of the network HAR (gzipped) for the task."""
+    return self._run_async(self._async_handle.har_url(timeout))
+
+  def console_log_url(self, timeout: int | None = 30) -> str:
+    """Returns the presigned URL of the browser console log for the task."""
+    return self._run_async(self._async_handle.console_log_url(timeout))
+
+  def session_log(self, timeout: int | None = 30) -> list[dict[str, Any]]:
+    """Returns the timestamped session log (steps and actions) for the task."""
+    return self._run_async(self._async_handle.session_log(timeout))
 
   def _start_proxy(self, server_url: str, token: str) -> None:
     return self._async_handle._start_proxy(server_url, token)

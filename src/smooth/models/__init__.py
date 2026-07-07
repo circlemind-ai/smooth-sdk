@@ -221,6 +221,18 @@ class TaskResponse(BaseModel):
     default=None,
     description="The URL of the archive containing the downloaded files.",
   )
+  network_har_url: str | None = Field(
+    default=None,
+    description="Presigned URL of the network HAR (gzipped) capturing the task's network activity.",
+  )
+  console_log_url: str | None = Field(
+    default=None,
+    description="Presigned URL of the timestamped browser console log.",
+  )
+  session_log: list[dict[str, Any]] | None = Field(
+    default=None,
+    description="Timestamped log of the session's steps and actions.",
+  )
   created_at: int | None = Field(default=None, description="The timestamp when the task was created.")
   tool_calls: dict[str, "ToolCall"] | None = Field(
     default=None, description="Contains a list of pending tool calls.", deprecated=True
