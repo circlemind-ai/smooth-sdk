@@ -26,6 +26,10 @@ class Secret(BaseModel):
 
   value: SensitiveStr = Field(description="The secret value.")
   allowed_urls: list[str] = Field(description="URL patterns where this secret can be used (e.g. 'https://github.com/*').")
+  conceal_screen: bool = Field(
+    default=True,
+    description="Hide the screen with an overlay while this secret is typed, so its value can't leak into the recording.",
+  )
 
 
 class Certificate(BaseModel):
