@@ -32,6 +32,8 @@ export const ToolSignatureSchema = z.object({
 export const SecretSchema = z.object({
   value: z.string(),
   allowed_urls: z.array(z.string()),
+  // Hide the screen with an overlay while this secret is typed, so its value can't leak into the recording. Defaults to true.
+  conceal_screen: z.boolean().optional(),
 });
 
 export const TaskEventSchema = z.object({
