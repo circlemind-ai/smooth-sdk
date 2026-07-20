@@ -65,6 +65,8 @@ export interface RunOptions {
   experimentalFeatures?: Record<string, unknown> | null;
   extensions?: string[] | null;
   showCursor?: boolean;
+  cursorText?: string;
+  cursorBubbleColor?: string;
 }
 
 export type SessionOptions = Omit<RunOptions, "task" | "responseModel" | "url">;
@@ -470,5 +472,7 @@ function buildTaskPayload(
     experimental_features: options.experimentalFeatures ?? null,
     extensions: options.extensions ?? null,
     show_cursor: options.showCursor ?? false,
+    cursor_text: options.cursorText,
+    cursor_bubble_color: options.cursorBubbleColor,
   };
 }

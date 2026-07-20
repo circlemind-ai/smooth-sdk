@@ -78,6 +78,8 @@ export const TaskRequestSchema = z.object({
   experimental_features: z.record(z.any()).nullish(),
   extensions: z.array(z.string()).nullish(),
   show_cursor: z.boolean().default(false),
+  cursor_text: z.string().optional(),
+  cursor_bubble_color: z.string().optional(),
 });
 
 // --- Response Schemas ---

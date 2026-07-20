@@ -191,6 +191,8 @@ class SmoothClient(BaseClient):
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
     show_cursor: bool = False,
+    cursor_text: str | None = None,
+    cursor_bubble_color: str | None = None,
   ) -> SessionHandle:
     """Opens a browser session."""
     if stealth_mode:
@@ -227,6 +229,8 @@ class SmoothClient(BaseClient):
       experimental_features=experimental_features,
       extensions=extensions,
       show_cursor=show_cursor,
+      cursor_text=cursor_text,
+      cursor_bubble_color=cursor_bubble_color,
     )
 
     tools = cast(dict[str, SmoothTool] | None, task_handle._async_handle._tools)
@@ -274,6 +278,8 @@ class SmoothClient(BaseClient):
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
     show_cursor: bool = False,
+    cursor_text: str | None = None,
+    cursor_bubble_color: str | None = None,
   ) -> TaskHandle:
     """Runs a task and returns a handle to the task.
 
@@ -312,6 +318,8 @@ class SmoothClient(BaseClient):
         experimental_features: Experimental features to enable for the task.
         extensions: List of extension IDs to load into the browser for this task.
         show_cursor: Show mouse cursor. Default is False.
+        cursor_text: Custom text shown in the cursor label bubble (max 16 characters). Requires show_cursor=True and a Growth plan.
+        cursor_bubble_color: Custom hex color (e.g. '#0081ff') for the cursor label bubble. Requires show_cursor=True and a Growth plan.
 
     Returns:
         A handle to the running task.
@@ -362,6 +370,8 @@ class SmoothClient(BaseClient):
         experimental_features=experimental_features,
         extensions=extensions,
         show_cursor=show_cursor,
+        cursor_text=cursor_text,
+        cursor_bubble_color=cursor_bubble_color,
       )
     )
 
@@ -659,6 +669,8 @@ class SmoothAsyncClient(BaseClient):
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
     show_cursor: bool = False,
+    cursor_text: str | None = None,
+    cursor_bubble_color: str | None = None,
   ) -> _AsyncSessionContextManager:
     """Opens a browser session.
 
@@ -698,6 +710,8 @@ class SmoothAsyncClient(BaseClient):
       experimental_features=experimental_features,
       extensions=extensions,
       show_cursor=show_cursor,
+      cursor_text=cursor_text,
+      cursor_bubble_color=cursor_bubble_color,
     ))
 
   @track(
@@ -731,6 +745,8 @@ class SmoothAsyncClient(BaseClient):
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
     show_cursor: bool = False,
+    cursor_text: str | None = None,
+    cursor_bubble_color: str | None = None,
   ) -> AsyncSessionHandle:
     """Internal coroutine for session creation."""
     # Handle proxy_server="self" - auto-start local proxy tunnel
@@ -761,6 +777,8 @@ class SmoothAsyncClient(BaseClient):
       experimental_features=experimental_features,
       extensions=extensions,
       show_cursor=show_cursor,
+      cursor_text=cursor_text,
+      cursor_bubble_color=cursor_bubble_color,
     )
 
     handle = AsyncSessionHandle(task_handle._id, self, tools=list(task_handle._tools.values()) if task_handle._tools else None)
@@ -821,6 +839,8 @@ class SmoothAsyncClient(BaseClient):
     experimental_features: dict[str, Any] | None = None,
     extensions: list[str] | None = None,
     show_cursor: bool = False,
+    cursor_text: str | None = None,
+    cursor_bubble_color: str | None = None,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
 
@@ -858,6 +878,8 @@ class SmoothAsyncClient(BaseClient):
         experimental_features: Experimental features to enable for the task.
         extensions: List of extension IDs to load into the browser for this task.
         show_cursor: Show mouse cursor. Default is False.
+        cursor_text: Custom text shown in the cursor label bubble (max 16 characters). Requires show_cursor=True and a Growth plan.
+        cursor_bubble_color: Custom hex color (e.g. '#0081ff') for the cursor label bubble. Requires show_cursor=True and a Growth plan.
 
     Returns:
         A handle to the running task.
@@ -910,6 +932,8 @@ class SmoothAsyncClient(BaseClient):
       experimental_features=experimental_features,
       extensions=extensions,
       show_cursor=show_cursor,
+      cursor_text=cursor_text,
+      cursor_bubble_color=cursor_bubble_color,
     )
 
     initial_response = await self._submit_task(payload)

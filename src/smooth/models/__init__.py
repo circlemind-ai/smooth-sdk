@@ -163,6 +163,14 @@ class TaskRequest(BaseModel):
     default=False,
     description="Show mouse cursor. Default is False.",
   )
+  cursor_text: str | None = Field(
+    default=None,
+    description="Custom text shown in the cursor label bubble (max 16 characters). Requires show_cursor=True and a Growth plan.",
+  )
+  cursor_bubble_color: str | None = Field(
+    default=None,
+    description="Custom hex color (e.g. '#0081ff') for the cursor label bubble. Requires show_cursor=True and a Growth plan.",
+  )
 
   @model_validator(mode="before")
   @classmethod
