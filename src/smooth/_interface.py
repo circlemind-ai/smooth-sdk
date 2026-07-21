@@ -668,12 +668,22 @@ class AsyncSessionHandle(AsyncTaskHandleEx):
       raise
 
   async def result(self, timeout: int | None = None, poll_interval: float | None = None):
-    """Waits for the session to close and returns the result."""
+    """Waits for the session to close and returns the result.
+
+    `_closed` only tracks SDK-initiated closes, but a session can also reach a terminal state on
+    its own (idle timeout, a fatal backend error, an external close). When `_closed` is unset we
+    consult live status rather than trust the flag: still running/waiting → raise (calling result()
+    while driving an open session would block indefinitely); already terminal → the session was
+    closed out from under us, so return its result instead of a misleading error.
+    """
     if not self._closed:
-      raise BadRequestError(
-        "result() cannot be called on an open session. "
-        "Close the session first with close(), or use client.run() for one-shot tasks."
-      )
+      status = (await self._client._get_task(self.id())).status  # live, not the poller's cached response
+      if status in ("running", "waiting"):
+        raise BadRequestError(
+          "result() cannot be called on an open session. "
+          "Close the session first with close(), or use client.run() for one-shot tasks."
+        )
+      self._closed = True  # observed terminal; treat as closed for subsequent calls
     return await self._handle.result(timeout, poll_interval)
 
 

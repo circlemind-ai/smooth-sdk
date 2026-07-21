@@ -271,9 +271,21 @@ class TestAsyncSessionHandle:
       assert result is True
 
   async def test_result_raises_if_not_closed(self):
-    handle = self._make_handle()
+    handle = self._make_handle()  # _get_task mocked to status="running"
     with pytest.raises(BadRequestError, match="result\\(\\) cannot be called on an open session"):
       await handle.result()
+
+  async def test_result_returns_when_closed_externally(self):
+    """A session that reached a terminal state without an SDK close (idle timeout, fatal error)
+    is detected via live status, so result() returns instead of raising the open-session error."""
+    handle = self._make_handle()
+    handle._client._get_task = AsyncMock(return_value=TaskResponse(id="t-1", status="done"))
+    terminal = TaskResponse(id="t-1", status="done", output="Session closed after 60s of inactivity.")
+    with patch.object(handle._handle, "result", new=AsyncMock(return_value=terminal)) as mock_result:
+      resp = await handle.result()
+    assert resp.status == "done"
+    assert handle._closed is True  # observed terminal → treated as closed for later calls
+    mock_result.assert_awaited_once()
 
 
 # --- SessionHandle (sync) ---

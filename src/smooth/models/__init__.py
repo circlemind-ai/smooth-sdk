@@ -171,6 +171,14 @@ class TaskRequest(BaseModel):
     default=None,
     description="Custom hex color (e.g. '#0081ff') for the cursor label bubble. Requires show_cursor=True and a Growth plan.",
   )
+  idle_timeout: int | None = Field(
+    default=None,
+    description=(
+      "Seconds of inactivity (no task, goto, evaluate_js, or extract) after which an open session "
+      "auto-closes. Only applies to sessions (task is None). None uses the server default (5 minutes); "
+      "0 or negative disables auto-close."
+    ),
+  )
 
   @model_validator(mode="before")
   @classmethod

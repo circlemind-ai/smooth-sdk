@@ -193,6 +193,7 @@ class SmoothClient(BaseClient):
     show_cursor: bool = False,
     cursor_text: str | None = None,
     cursor_bubble_color: str | None = None,
+    idle_timeout: int | None = None,
   ) -> SessionHandle:
     """Opens a browser session."""
     if stealth_mode:
@@ -231,6 +232,7 @@ class SmoothClient(BaseClient):
       show_cursor=show_cursor,
       cursor_text=cursor_text,
       cursor_bubble_color=cursor_bubble_color,
+      idle_timeout=idle_timeout,
     )
 
     tools = cast(dict[str, SmoothTool] | None, task_handle._async_handle._tools)
@@ -280,6 +282,7 @@ class SmoothClient(BaseClient):
     show_cursor: bool = False,
     cursor_text: str | None = None,
     cursor_bubble_color: str | None = None,
+    idle_timeout: int | None = None,
   ) -> TaskHandle:
     """Runs a task and returns a handle to the task.
 
@@ -320,6 +323,8 @@ class SmoothClient(BaseClient):
         show_cursor: Show mouse cursor. Default is False.
         cursor_text: Custom text shown in the cursor label bubble (max 16 characters). Requires show_cursor=True and a Growth plan.
         cursor_bubble_color: Custom hex color (e.g. '#0081ff') for the cursor label bubble. Requires show_cursor=True and a Growth plan.
+        idle_timeout: Seconds of inactivity after which an open session auto-closes. Sessions only (ignored when a
+          task is set). None uses the server default (5 minutes); 0 or negative disables auto-close.
 
     Returns:
         A handle to the running task.
@@ -372,6 +377,7 @@ class SmoothClient(BaseClient):
         show_cursor=show_cursor,
         cursor_text=cursor_text,
         cursor_bubble_color=cursor_bubble_color,
+        idle_timeout=idle_timeout,
       )
     )
 
@@ -671,6 +677,7 @@ class SmoothAsyncClient(BaseClient):
     show_cursor: bool = False,
     cursor_text: str | None = None,
     cursor_bubble_color: str | None = None,
+    idle_timeout: int | None = None,
   ) -> _AsyncSessionContextManager:
     """Opens a browser session.
 
@@ -712,6 +719,7 @@ class SmoothAsyncClient(BaseClient):
       show_cursor=show_cursor,
       cursor_text=cursor_text,
       cursor_bubble_color=cursor_bubble_color,
+      idle_timeout=idle_timeout,
     ))
 
   @track(
@@ -747,6 +755,7 @@ class SmoothAsyncClient(BaseClient):
     show_cursor: bool = False,
     cursor_text: str | None = None,
     cursor_bubble_color: str | None = None,
+    idle_timeout: int | None = None,
   ) -> AsyncSessionHandle:
     """Internal coroutine for session creation."""
     # Handle proxy_server="self" - auto-start local proxy tunnel
@@ -779,6 +788,7 @@ class SmoothAsyncClient(BaseClient):
       show_cursor=show_cursor,
       cursor_text=cursor_text,
       cursor_bubble_color=cursor_bubble_color,
+      idle_timeout=idle_timeout,
     )
 
     handle = AsyncSessionHandle(task_handle._id, self, tools=list(task_handle._tools.values()) if task_handle._tools else None)
@@ -841,6 +851,7 @@ class SmoothAsyncClient(BaseClient):
     show_cursor: bool = False,
     cursor_text: str | None = None,
     cursor_bubble_color: str | None = None,
+    idle_timeout: int | None = None,
   ) -> AsyncTaskHandle:
     """Runs a task and returns a handle to the task asynchronously.
 
@@ -880,6 +891,8 @@ class SmoothAsyncClient(BaseClient):
         show_cursor: Show mouse cursor. Default is False.
         cursor_text: Custom text shown in the cursor label bubble (max 16 characters). Requires show_cursor=True and a Growth plan.
         cursor_bubble_color: Custom hex color (e.g. '#0081ff') for the cursor label bubble. Requires show_cursor=True and a Growth plan.
+        idle_timeout: Seconds of inactivity after which an open session auto-closes. Sessions only (ignored when a
+          task is set). None uses the server default (5 minutes); 0 or negative disables auto-close.
 
     Returns:
         A handle to the running task.
@@ -934,6 +947,7 @@ class SmoothAsyncClient(BaseClient):
       show_cursor=show_cursor,
       cursor_text=cursor_text,
       cursor_bubble_color=cursor_bubble_color,
+      idle_timeout=idle_timeout,
     )
 
     initial_response = await self._submit_task(payload)
