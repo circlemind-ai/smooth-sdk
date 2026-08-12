@@ -30,6 +30,7 @@ from .models import (
   Extension,
   ProfileRequest,
   ProfileResponse,
+  ProxyResponse,
   TaskEvent,
   TaskEventResponse,
   TaskRequest,
@@ -183,6 +184,7 @@ class SmoothClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    proxy_id: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     use_captcha_solver: bool | None = True,
@@ -222,6 +224,7 @@ class SmoothClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      proxy_id=proxy_id,
       certificates=certificates,
       use_adblock=use_adblock,
       use_captcha_solver=use_captcha_solver,
@@ -272,6 +275,7 @@ class SmoothClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    proxy_id: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     use_captcha_solver: bool | None = True,
@@ -310,6 +314,7 @@ class SmoothClient(BaseClient):
         proxy_server: Proxy server address to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
+        proxy_id: Name of a Smooth-managed proxy (see `list_proxies`). Cannot be combined with `proxy_server`.
         certificates: List of client certificates to use when accessing secure websites.
           Each certificate is a dictionary with the following fields:
           - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
@@ -367,6 +372,7 @@ class SmoothClient(BaseClient):
         proxy_server=proxy_server,
         proxy_username=proxy_username,
         proxy_password=proxy_password,
+        proxy_id=proxy_id,
         certificates=certificates,
         use_adblock=use_adblock,
         use_captcha_solver=use_captcha_solver,
@@ -440,6 +446,28 @@ class SmoothClient(BaseClient):
         ApiException: If the API request fails.
     """
     return self._run_async(self._async_client.delete_profile(profile_id))
+
+  # --- Proxy Methods --- #
+
+  def list_proxies(self) -> list[ProxyResponse]:
+    """Lists the Smooth-managed proxies assigned to your organisation.
+
+    Returns:
+        A list of proxies, to be used via the `proxy_id` parameter.
+    """
+    return self._run_async(self._async_client.list_proxies())
+
+  def set_proxy_auto_renew(self, proxy_id: str, enabled: bool) -> ProxyResponse:
+    """Turns a proxy's monthly renewal on or off.
+
+    Args:
+        proxy_id: The name of the proxy, as returned by `list_proxies`.
+        enabled: False releases the proxy at the end of the paid period; True keeps it.
+
+    Returns:
+        The updated proxy.
+    """
+    return self._run_async(self._async_client.set_proxy_auto_renew(proxy_id, enabled))
 
   # --- File Uploads Methods --- #
 
@@ -667,6 +695,7 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    proxy_id: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     use_captcha_solver: bool | None = True,
@@ -709,6 +738,7 @@ class SmoothAsyncClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      proxy_id=proxy_id,
       certificates=certificates,
       use_adblock=use_adblock,
       use_captcha_solver=use_captcha_solver,
@@ -745,6 +775,7 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    proxy_id: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     use_captcha_solver: bool | None = True,
@@ -778,6 +809,7 @@ class SmoothAsyncClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,
+      proxy_id=proxy_id,
       certificates=certificates,
       use_adblock=use_adblock,
       use_captcha_solver=use_captcha_solver,
@@ -841,6 +873,7 @@ class SmoothAsyncClient(BaseClient):
     proxy_server: str | None = None,
     proxy_username: str | None = None,
     proxy_password: str | None = None,
+    proxy_id: str | None = None,
     certificates: list[Certificate | dict[str, Any]] | None = None,
     use_adblock: bool | None = True,
     use_captcha_solver: bool | None = True,
@@ -878,6 +911,7 @@ class SmoothAsyncClient(BaseClient):
         proxy_server: Proxy server address to route browser traffic through.
         proxy_username: Proxy server username.
         proxy_password: Proxy server password.
+        proxy_id: Name of a Smooth-managed proxy (see `list_proxies`). Cannot be combined with `proxy_server`.
         certificates: List of client certificates to use when accessing secure websites.
           Each certificate is a dictionary with the following fields:
           - `file` (required): p12 file object to be uploaded (e.g., open("cert.p12", "rb")).
@@ -937,6 +971,7 @@ class SmoothAsyncClient(BaseClient):
       proxy_server=proxy_server,
       proxy_username=proxy_username,
       proxy_password=proxy_password,  # pyright: ignore[reportArgumentType]
+      proxy_id=proxy_id,
       certificates=certificates_,
       use_adblock=use_adblock,
       use_captcha_solver=use_captcha_solver,
@@ -1047,6 +1082,53 @@ class SmoothAsyncClient(BaseClient):
       session = await self._ensure_session()
       async with session.delete(f"{self.base_url}/profile/{profile_id}") as response:
         await self._handle_response(response)
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  # --- Proxy Methods --- #
+
+  @track("sdk.list_proxies")
+  async def list_proxies(self) -> list[ProxyResponse]:
+    """Lists the Smooth-managed proxies assigned to your organisation.
+
+    Returns:
+        A list of proxies, to be used via the `proxy_id` parameter.
+
+    Raises:
+        ApiException: If the API request fails.
+    """
+    try:
+      session = await self._ensure_session()
+      async with session.get(f"{self.base_url}/proxy") as response:
+        data = await self._handle_response(response)
+        return [ProxyResponse(**d) for d in data["r"]]
+    except aiohttp.ClientError as e:
+      logger.error(f"Request failed: {e}")
+      raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None
+
+  @track(
+    "sdk.set_proxy_auto_renew",
+    properties_fn=lambda a, kw: {"enabled": kw.get("enabled") or (a[2] if len(a) > 2 else None)},
+  )
+  async def set_proxy_auto_renew(self, proxy_id: str, enabled: bool) -> ProxyResponse:
+    """Turns a proxy's monthly renewal on or off.
+
+    Args:
+        proxy_id: The name of the proxy, as returned by `list_proxies`.
+        enabled: False releases the proxy at the end of the paid period; True keeps it.
+
+    Returns:
+        The updated proxy.
+
+    Raises:
+        ApiException: If the API request fails.
+    """
+    try:
+      session = await self._ensure_session()
+      async with session.patch(f"{self.base_url}/proxy/{proxy_id}", params={"auto_renew": str(enabled).lower()}) as response:
+        data = await self._handle_response(response)
+        return ProxyResponse(**data["r"])
     except aiohttp.ClientError as e:
       logger.error(f"Request failed: {e}")
       raise ApiError(status_code=0, detail=f"Request failed: {str(e)}") from None

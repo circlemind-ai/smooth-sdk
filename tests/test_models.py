@@ -10,6 +10,7 @@ from smooth.models import (
   BrowserSessionRequest,
   BrowserSessionResponse,
   Certificate,
+  ProxyResponse,
   TaskEvent,
   TaskRequest,
   TaskResponse,
@@ -113,6 +114,25 @@ class TestBrowserSessionRequestSecrets:
     req = BrowserSessionRequest(proxy_password="secret-pw")  # pyright: ignore[reportArgumentType]
     data = req.model_dump(context={"reveal_secrets": True})
     assert data["proxy_password"] == "secret-pw"
+
+
+# --- Managed proxies ---
+
+
+class TestManagedProxies:
+  def test_proxy_id_defaults_to_none(self):
+    assert TaskRequest(task="do something").proxy_id is None
+    assert BrowserSessionRequest().proxy_id is None
+
+  def test_proxy_id_is_sent_by_name(self):
+    req = TaskRequest(task="do something", proxy_id="us-residential-1")
+    assert req.model_dump()["proxy_id"] == "us-residential-1"
+
+  def test_proxy_response_parses_the_api_projection(self):
+    proxy = ProxyResponse(
+      id="us-residential-1", type="isp", country="US", exit_ip="64.139.46.3", created_at=1, auto_renew=True
+    )
+    assert (proxy.id, proxy.exit_ip, proxy.expires_at, proxy.last_used_at) == ("us-residential-1", "64.139.46.3", None, None)
 
 
 # --- TaskResponse ---

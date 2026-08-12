@@ -134,6 +134,13 @@ class TaskRequest(BaseModel):
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: SensitiveStr | None = Field(default=None, description="Proxy server password.")
+  proxy_id: str | None = Field(
+    default=None,
+    description=(
+      "Name of a Smooth-managed proxy to route browser traffic through, as returned by `list_proxies()`. "
+      "Cannot be combined with `proxy_server`."
+    ),
+  )
   certificates: list[Certificate] | None = Field(
     default=None,
     description=(
@@ -286,6 +293,30 @@ class ProfileResponse(BaseModel):
   last_saved_at: int | None = Field(default=None, description="Unix epoch seconds of the most recent profile save.")
 
 
+class ProxyResponse(BaseModel):
+  """Response model for a Smooth-managed proxy."""
+
+  model_config = ConfigDict(extra="allow")
+
+  id: str = Field(description="The name of the proxy, to pass as `proxy_id` when running a task or session.")
+  type: str = Field(description="The proxy type, e.g. 'isp'.")
+  country: str | None = Field(default=None, description="Country the proxy exits from.")
+  city: str | None = Field(default=None, description="City the proxy exits from.")
+  exit_ip: str | None = Field(default=None, description="IP the proxy's traffic exits from, for whitelisting.")
+  isp: str | None = Field(default=None, description="ISP owning the exit IP, e.g. 'Lumen'.")
+  asn: str | None = Field(default=None, description="Autonomous system of the exit IP, e.g. 'AS10753'.")
+  created_at: int = Field(description="Unix epoch seconds of when the proxy was created.")
+  expires_at: int | None = Field(
+    default=None,
+    description=(
+      "Unix epoch seconds of when the current period ends: the renewal date, "
+      "or the release date if `auto_renew` is False."
+    ),
+  )
+  last_used_at: int | None = Field(default=None, description="Unix epoch seconds of the most recent task using the proxy.")
+  auto_renew: bool = Field(description="Whether the proxy renews automatically at the end of the period.")
+
+
 class UploadFileResponse(BaseModel):
   """Response model for uploading a file."""
 
@@ -410,6 +441,13 @@ class BrowserSessionRequest(BaseModel):
   )
   proxy_username: str | None = Field(default=None, description="Proxy server username.")
   proxy_password: SensitiveStr | None = Field(default=None, description="Proxy server password.")
+  proxy_id: str | None = Field(
+    default=None,
+    description=(
+      "Name of a Smooth-managed proxy to route browser traffic through, as returned by `list_proxies()`. "
+      "Cannot be combined with `proxy_server`."
+    ),
+  )
   extensions: list[str] | None = Field(default=None, description="List of extensions to install for the task.")
   use_stealth: bool = Field(default=True, description="Run the browser in stealth mode. Default is True.")
 
