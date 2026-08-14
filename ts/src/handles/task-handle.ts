@@ -36,6 +36,23 @@ function createDeferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
+/** Resolves early when aborted, so a waiting poller can re-check its exit conditions. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+
+    let timer: ReturnType<typeof setTimeout>;
+    const finish = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+
+    timer = setTimeout(finish, ms);
+    signal.addEventListener("abort", finish, { once: true });
+  });
+}
+
 export class TaskHandle {
   readonly _id: string;
   _taskResponse: TaskResponse | null = null;
@@ -44,8 +61,7 @@ export class TaskHandle {
 
   private _isAlive = 0;
   _pollInterval = 1000;
-  private _pollingTimer: ReturnType<typeof setTimeout> | null = null;
-  private _pollingActive = false;
+  private _pollingAbort: AbortController | null = null;
   private _lastEventT = 0;
 
   private _eventDeferreds: Map<string, Deferred<unknown>> = new Map();
@@ -349,16 +365,18 @@ export class TaskHandle {
   }
 
   private _startPolling(): void {
-    if (this._pollingActive) return;
-    this._pollingActive = true;
+    this._pollingAbort?.abort();
+    const abort = new AbortController();
+    this._pollingAbort = abort;
 
     const poll = async () => {
       const pollerId = nanoid(8);
       let consecutiveFailures = 0;
+      let taskFinished = false;
       const maxRetries = 5;
 
       try {
-        while (this._isAlive > 0) {
+        while (this._isAlive > 0 && !abort.signal.aborted) {
           // Skip the throttle when the previous response carried progress: long-poll on
           // the API holds the next GET open until events arrive, so an extra sleep here
           // would just add per-command latency. Sleep only when the previous response
@@ -368,15 +386,10 @@ export class TaskHandle {
             (!this._taskResponse.events?.length &&
               ["running", "waiting"].includes(this._taskResponse.status))
           ) {
-            await new Promise((r) => {
-              this._pollingTimer = setTimeout(r, this._pollInterval);
-              if (this._pollingTimer && typeof this._pollingTimer === "object" && "unref" in this._pollingTimer) {
-                this._pollingTimer.unref();
-              }
-            });
+            await sleep(this._pollInterval, abort.signal);
           }
 
-          if (this._isAlive <= 0) break;
+          if (this._isAlive <= 0 || abort.signal.aborted) break;
 
           try {
             const taskResponse = await this._client._getTask(this.id(), {
@@ -386,6 +399,7 @@ export class TaskHandle {
             this._taskResponse = taskResponse;
 
             if (!["running", "waiting"].includes(taskResponse.status)) {
+              taskFinished = true;
               break;
             }
 
@@ -425,28 +439,39 @@ export class TaskHandle {
             logger.warn(
               `Poller ${pollerId} transient error (attempt ${consecutiveFailures}/${maxRetries}), retrying in ${backoff}s: ${e}`,
             );
-            await new Promise((r) => setTimeout(r, backoff * 1000));
+            await sleep(backoff * 1000, abort.signal);
           }
+        }
+
+        if (taskFinished) {
+          this._settlePending(
+            new ApiError(
+              0,
+              `Task ${this.id()} finished before the pending action returned a result.`,
+            ),
+          );
         }
       } catch (e) {
         this._isAlive = 0;
-
-        for (const deferred of this._eventDeferreds.values()) {
-          deferred.reject(e);
-        }
-        this._eventDeferreds.clear();
-        this._toolTasks.clear();
-
+        this._settlePending(e);
         logger.error(
           `Poller ${pollerId} for task ${this.id()} failed: ${e}`,
         );
+      } finally {
+        if (this._pollingAbort === abort) this._pollingAbort = null;
+        logger.debug(`Poller for task ${this.id()} stopped`);
       }
-
-      this._pollingActive = false;
-      logger.debug(`Poller for task ${this.id()} stopped`);
     };
 
     void poll();
+  }
+
+  private _settlePending(reason: unknown): void {
+    for (const deferred of this._eventDeferreds.values()) {
+      deferred.reject(reason);
+    }
+    this._eventDeferreds.clear();
+    this._toolTasks.clear();
   }
 
   private _processEvent(event: TaskEvent & { id: string }): void {
@@ -496,9 +521,7 @@ export class TaskHandle {
   }
 
   private _stopPolling(): void {
-    if (this._pollingTimer) {
-      clearTimeout(this._pollingTimer);
-      this._pollingTimer = null;
-    }
+    this._pollingAbort?.abort();
+    this._pollingAbort = null;
   }
 }

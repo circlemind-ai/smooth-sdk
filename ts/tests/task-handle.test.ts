@@ -257,6 +257,72 @@ describe("TaskHandle", () => {
   });
 });
 
+
+describe("TaskHandle polling lifecycle", () => {
+  it("keeps delivering events after a connection cycle ends mid-sleep", async () => {
+    // liveUrl() connects then disconnects while the poller is sleeping. The
+    // next action must still get its result.
+    const client = createMockClient([
+      { id: "t-1", status: "running", live_url: "https://live.example/t-1" },
+      { id: "t-1", status: "running", events: [] },
+    ]);
+    const handle = new TaskHandle("t-1", client);
+    handle._pollInterval = 20;
+
+    expect(await handle.liveUrl()).toContain("https://live.example/t-1");
+
+    // Call 1 is _connect's own fetch, which does not dispatch events; only the
+    // poller's fetch does, so that is where the result has to arrive.
+    let calls = 0;
+    client._getTask = vi.fn(async () => {
+      calls += 1;
+      const events =
+        calls === 2
+          ? [
+              {
+                id: "evt-1",
+                name: "session_action",
+                payload: { code: 200, output: { navigated: true } },
+                timestamp: 1,
+              },
+            ]
+          : [];
+      return { id: "t-1", status: "running", events } as any;
+    });
+
+    const result = await handle._sendEvent(
+      {
+        name: "session_action",
+        payload: { name: "goto", input: { url: "https://example.com" } },
+        id: "evt-1",
+      },
+      true,
+    );
+
+    expect(result).toEqual({ navigated: true });
+  });
+
+  it("rejects a pending action when the task finishes first", async () => {
+    const client = createMockClient([
+      { id: "t-1", status: "running", events: [] },
+      { id: "t-1", status: "done", events: [] },
+    ]);
+    const handle = new TaskHandle("t-1", client);
+    handle._pollInterval = 10;
+
+    await expect(
+      handle._sendEvent(
+        {
+          name: "session_action",
+          payload: { name: "goto", input: { url: "https://example.com" } },
+          id: "evt-1",
+        },
+        true,
+      ),
+    ).rejects.toThrow(/finished before the pending action/);
+  });
+});
+
 describe("TaskHandle event deferreds", () => {
   it("does not crash the process when an action fails before the caller awaits", async () => {
     const client = createMockClient([{ id: "t-1", status: "running", events: [] }]);
