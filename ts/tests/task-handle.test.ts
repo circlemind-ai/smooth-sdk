@@ -256,3 +256,58 @@ describe("TaskHandle", () => {
     });
   });
 });
+
+describe("TaskHandle event deferreds", () => {
+  it("does not crash the process when an action fails before the caller awaits", async () => {
+    const client = createMockClient([{ id: "t-1", status: "running", events: [] }]);
+    const handle = new TaskHandle("t-1", client);
+    handle._pollInterval = 10;
+
+    let postStarted = false;
+    let delivered = false;
+    client._getTask = vi.fn(async () => {
+      const deliverNow = postStarted && !delivered;
+      if (deliverNow) delivered = true;
+      return {
+        id: "t-1",
+        status: "running",
+        events: deliverNow
+          ? [
+              {
+                id: "evt-1",
+                name: "session_action",
+                payload: { code: 500, output: "Error executing action `evaluate_js`" },
+                timestamp: 1,
+              },
+            ]
+          : [],
+      } as any;
+    });
+
+    // The result lands during this POST, before _withConnection attaches.
+    client._sendTaskEvent = vi.fn(async () => {
+      postStarted = true;
+      await new Promise((r) => setTimeout(r, 120));
+      return { id: "evt-1" };
+    });
+
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", record);
+
+    try {
+      await handle._connect();
+      await expect(
+        handle._sendEvent(
+          { name: "session_action", payload: { name: "evaluate_js", input: {} }, id: "evt-1" },
+          true,
+        ),
+      ).rejects.toThrow(/evaluate_js/);
+      await new Promise((r) => setTimeout(r, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", record);
+      handle._disconnect();
+    }
+  });
+});

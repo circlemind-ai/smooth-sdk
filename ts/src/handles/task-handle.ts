@@ -21,6 +21,10 @@ interface Deferred<T> {
   reject: (reason: unknown) => void;
 }
 
+function preventUnhandledRejection(promise: Promise<unknown>): void {
+  promise.catch(() => {});
+}
+
 function createDeferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
@@ -28,6 +32,7 @@ function createDeferred<T>(): Deferred<T> {
     resolve = res;
     reject = rej;
   });
+  preventUnhandledRejection(promise);
   return { promise, resolve, reject };
 }
 
