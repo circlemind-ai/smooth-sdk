@@ -94,10 +94,12 @@ export class SmoothClient {
   private _fetch: typeof globalThis.fetch;
 
   constructor(options?: ClientOptions) {
-    const apiKey = options?.apiKey ?? process.env.CIRCLEMIND_API_KEY;
+    // SMOOTH_API_KEY is preferred; CIRCLEMIND_API_KEY is kept for backwards compatibility.
+    const apiKey =
+      options?.apiKey ?? process.env.SMOOTH_API_KEY ?? process.env.CIRCLEMIND_API_KEY;
     if (!apiKey) {
       throw new Error(
-        "API key is required. Provide it directly or set CIRCLEMIND_API_KEY environment variable.",
+        "API key is required. Provide it directly or set the SMOOTH_API_KEY environment variable.",
       );
     }
 

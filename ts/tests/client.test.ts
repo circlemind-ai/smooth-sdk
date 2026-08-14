@@ -55,26 +55,53 @@ beforeEach(() => {
 });
 
 describe("SmoothClient constructor", () => {
-  it("requires api key", () => {
-    const oldKey = process.env.CIRCLEMIND_API_KEY;
+  /** Run `fn` with both key variables cleared, then restore them. */
+  const withoutApiKeyEnv = (fn: () => void) => {
+    const previous = {
+      SMOOTH_API_KEY: process.env.SMOOTH_API_KEY,
+      CIRCLEMIND_API_KEY: process.env.CIRCLEMIND_API_KEY,
+    };
+    delete process.env.SMOOTH_API_KEY;
     delete process.env.CIRCLEMIND_API_KEY;
     try {
-      expect(() => new SmoothClient()).toThrow("API key is required");
+      fn();
     } finally {
-      if (oldKey) process.env.CIRCLEMIND_API_KEY = oldKey;
+      for (const [name, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
     }
+  };
+
+  it("requires api key", () => {
+    withoutApiKeyEnv(() => {
+      expect(() => new SmoothClient()).toThrow("API key is required");
+    });
   });
 
-  it("uses env var when no key provided", () => {
-    const oldKey = process.env.CIRCLEMIND_API_KEY;
-    process.env.CIRCLEMIND_API_KEY = FAKE_KEY;
-    try {
+  it("uses SMOOTH_API_KEY when no key provided", () => {
+    withoutApiKeyEnv(() => {
+      process.env.SMOOTH_API_KEY = FAKE_KEY;
       const client = new SmoothClient({ _fetch: mockFetch([]) });
       expect(client.apiKey).toBe(FAKE_KEY);
-    } finally {
-      if (oldKey) process.env.CIRCLEMIND_API_KEY = oldKey;
-      else delete process.env.CIRCLEMIND_API_KEY;
-    }
+    });
+  });
+
+  it("falls back to CIRCLEMIND_API_KEY for backwards compatibility", () => {
+    withoutApiKeyEnv(() => {
+      process.env.CIRCLEMIND_API_KEY = FAKE_KEY;
+      const client = new SmoothClient({ _fetch: mockFetch([]) });
+      expect(client.apiKey).toBe(FAKE_KEY);
+    });
+  });
+
+  it("prefers SMOOTH_API_KEY over CIRCLEMIND_API_KEY", () => {
+    withoutApiKeyEnv(() => {
+      process.env.SMOOTH_API_KEY = FAKE_KEY;
+      process.env.CIRCLEMIND_API_KEY = "legacy-key";
+      const client = new SmoothClient({ _fetch: mockFetch([]) });
+      expect(client.apiKey).toBe(FAKE_KEY);
+    });
   });
 
   it("explicit key overrides env", () => {

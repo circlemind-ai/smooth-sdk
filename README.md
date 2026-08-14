@@ -132,7 +132,7 @@ Get your API key at [app.smooth.sh](https://app.smooth.sh)
 
 **Option 1: Environment variable**
 ```bash
-export CIRCLEMIND_API_KEY="your-api-key"
+export SMOOTH_API_KEY="your-api-key"
 ```
 
 **Option 2: Direct configuration**
