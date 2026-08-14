@@ -1,6 +1,6 @@
 {
   "name": "@smooth-sh/smooth-ts",
-  "version": "0.4.2-beta.1",
+  "version": "0.4.2-beta.2",
   "description": "TypeScript SDK for Smooth browser automation",
   "type": "module",
   "main": "./dist/index.cjs",
