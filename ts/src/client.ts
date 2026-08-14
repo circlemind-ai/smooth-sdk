@@ -67,6 +67,7 @@ export interface RunOptions {
   showCursor?: boolean;
   cursorText?: string;
   cursorBubbleColor?: string;
+  idleTimeout?: number | null;
 }
 
 export type SessionOptions = Omit<RunOptions, "task" | "responseModel" | "url">;
@@ -476,5 +477,6 @@ function buildTaskPayload(
     show_cursor: options.showCursor ?? false,
     cursor_text: options.cursorText,
     cursor_bubble_color: options.cursorBubbleColor,
+    idle_timeout: options.idleTimeout ?? null,
   };
 }

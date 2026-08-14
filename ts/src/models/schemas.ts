@@ -80,6 +80,7 @@ export const TaskRequestSchema = z.object({
   show_cursor: z.boolean().default(false),
   cursor_text: z.string().optional(),
   cursor_bubble_color: z.string().optional(),
+  idle_timeout: z.number().int().nullish(),
 });
 
 // --- Response Schemas ---

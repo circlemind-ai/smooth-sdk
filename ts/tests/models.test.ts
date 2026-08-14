@@ -29,6 +29,14 @@ describe("TaskRequestSchema", () => {
     expect(req.use_adblock).toBe(true);
     expect(req.use_captcha_solver).toBe(true);
     expect(req.show_cursor).toBe(false);
+    expect(req.idle_timeout).toBeUndefined();
+  });
+
+  it("accepts idle_timeout", () => {
+    expect(TaskRequestSchema.parse({ idle_timeout: 900 }).idle_timeout).toBe(900);
+    expect(TaskRequestSchema.parse({ idle_timeout: 0 }).idle_timeout).toBe(0);
+    expect(TaskRequestSchema.parse({ idle_timeout: null }).idle_timeout).toBeNull();
+    expect(() => TaskRequestSchema.parse({ idle_timeout: 1.5 })).toThrow();
   });
 
   it("validates max_steps minimum", () => {
