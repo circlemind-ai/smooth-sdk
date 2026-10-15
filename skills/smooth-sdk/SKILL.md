@@ -29,7 +29,7 @@ print(task.result().output)   # blocks until done
 ```
 
 Auth: pass `api_key=`, or set `SMOOTH_API_KEY`. Get a key at https://app.smooth.sh.
-A TypeScript SDK (`@circlemind-ai/smooth-ts`) mirrors this same API.
+A TypeScript SDK (`@smooth-sh/smooth-ts`) is also available. It uses camelCase names such as `apiKey` and `task.liveUrl()`.
 
 ## Operating mode: act as a Smooth automation consultant
 

@@ -12,6 +12,7 @@
 
 - [CLI](#cli)
 - [Python SDK](#python-sdk)
+- [Telemetry](#telemetry)
 
 ---
 
@@ -123,6 +124,15 @@ print(f"Agent response: {task.result()}")
 We have async clients, persistent sessions, auto-captcha solvers, stealth mode, infinite scaling, and much more. Dive deep in the docs, it's fun.
 
 Smooth is **state-of-the-art on reliability, speed, and cost**, check out our performance summary: https://docs.smooth.sh/performance
+
+---
+
+## Telemetry
+
+Usage telemetry is enabled by default in the Python and TypeScript SDKs, including the Python CLI, and is sent to the Smooth API.
+Events include the SDK and runtime versions, OS and architecture, event name, timestamp, duration, and error type/message when applicable.
+Depending on the call, event properties also include task text, URLs, and extraction prompts.
+Set `SMOOTH_TELEMETRY=off` before starting your process to disable telemetry.
 
 ---
 
